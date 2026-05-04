@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="assets/logo_dark.png" alt="AsBuilt Lens Logo" width="320"/>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo_dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/logo1.PNG">
+    <img alt="AsBuilt Lens Logo" src="assets/logo1.PNG" width="320">
+  </picture>
 </p>
 
 <h3 align="center">Describe what should exist. The AI verifies it visually.</h3>
@@ -94,7 +98,7 @@ User writes specification
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-username/AsBuilt-Lens.git
+git clone https://github.com/JaDi03/AsBuilt-Lens.git
 cd AsBuilt-Lens
 ```
 
