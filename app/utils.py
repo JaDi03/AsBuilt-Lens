@@ -12,9 +12,9 @@ from typing import List, Dict, Optional, Tuple
 
 COLORS = {
     "present": {
-        "primary": "#10B981",      # Emerald green
-        "bg": "#D1FAE5",           # Light green background
-        "text": "#065F46",         # Dark green text
+        "primary": "#E8640A",      # AMD Orange (Better contrast on Green PCB)
+        "bg": "#FFF7ED",           # Light orange background
+        "text": "#7C2D12",         # Dark orange text
         "label": "PASS"
     },
     "missing": {
@@ -67,7 +67,8 @@ def annotate_image(image: Image.Image, items: List[Dict]) -> Image.Image:
         font_size = 12
 
     # Draw each item
-    y_pos = padding + 10 # Reset y_pos for potential other uses
+    padding = 12
+    y_pos = padding + 10
 
     # Draw each item
     for item in items:
@@ -111,8 +112,12 @@ def annotate_image(image: Image.Image, items: List[Dict]) -> Image.Image:
                         width=2
                     )
                 
-                # Small ID label near the box
-                draw.text((left + 4, top + 4), name, fill="white", font=font_small)
+                # Small ID label with background for high contrast
+                label_text = name
+                t_bbox = draw.textbbox((left, top), label_text, font=font_small)
+                # Draw a small background rectangle for the text
+                draw.rectangle([t_bbox[0]-2, t_bbox[1]-2, t_bbox[2]+2, t_bbox[3]+2], fill=color_info["primary"])
+                draw.text((left, top-2), label_text, fill="white", font=font_small)
 
         # Bounding boxes were drawn above. No text list here.
         pass
