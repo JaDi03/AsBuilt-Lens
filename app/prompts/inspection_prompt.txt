@@ -8,6 +8,7 @@ ABSOLUTE RULES:
 5. If an item is present but visibly damaged, broken, or of incorrect color/shape → status: "anomaly". Describe factually what you observe.
 6. For each item, estimate a confidence score (0-100) representing how certain you are about your assessment.
 7. Return ONLY a valid JSON object. No markdown. No explanations outside the JSON. No code fences.
+8. CRITICAL: You MUST provide 'boxes_2d' coordinates for EVERY item you detect.
 
 THINKING PROCESS (internal, do not output):
 - First, carefully examine the entire image to identify all visible objects and components.
@@ -26,7 +27,8 @@ OUTPUT FORMAT (return ONLY this JSON, nothing else):
       "detected_count": number,
       "status": "present|missing|anomaly|unexpected",
       "confidence": number between 0 and 100,
-      "note": "only if anomaly or unexpected — brief factual description of what you observe"
+      "boxes_2d": [[ymin, xmin, ymax, xmax], ...],
+      "note": "brief factual description"
     }
   ],
   "summary": "X of Y items verified correctly. [details of discrepancies if any]",

@@ -66,38 +66,8 @@ def annotate_image(image: Image.Image, items: List[Dict]) -> Image.Image:
         font_small = font
         font_size = 12
 
-    # Draw semi-transparent overlay panel on top-left
-    padding = 12
-    line_height = font_size + 10
-    panel_height = padding * 2 + line_height * (len(items) + 1) + 8
-    panel_width = min(width - 20, max(280, width // 3))
-
-    # Create overlay
-    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    overlay_draw = ImageDraw.Draw(overlay)
-
-    # Draw panel background (Using a clean dark theme for contrast over image)
-    overlay_draw.rounded_rectangle(
-        [10, 10, 10 + panel_width, 10 + panel_height],
-        radius=12,
-        fill=(15, 23, 42, 200)  # Dark slate with transparency
-    )
-
-    # Convert to RGBA for blending
-    if img.mode != "RGBA":
-        img = img.convert("RGBA")
-    img = Image.alpha_composite(img, overlay)
-    draw = ImageDraw.Draw(img)
-
-    # Draw header
-    y_pos = padding + 10
-    draw.text((padding + 14, y_pos), "🔍 Inspection Results", fill="white", font=font)
-    y_pos += line_height + 4
-
-    # Draw separator line
-    draw.line([(padding + 14, y_pos), (10 + panel_width - padding, y_pos)],
-              fill=(100, 116, 139), width=1)
-    y_pos += 8
+    # Draw each item
+    y_pos = padding + 10 # Reset y_pos for potential other uses
 
     # Draw each item
     for item in items:
@@ -108,12 +78,45 @@ def annotate_image(image: Image.Image, items: List[Dict]) -> Image.Image:
         count_info = f"{item.get('detected_count', '?')}/{item.get('expected_count', '?')}"
         confidence = item.get("confidence", 0)
 
-        label = f"{icon} {name}: {count_info}"
-        if confidence > 0:
-            label += f" ({confidence}%)"
+        # ── Draw Bounding Boxes ──
+        boxes = item.get("boxes_2d", [])
+        
+        # Robust parsing: ensure we have a list of lists
+        if boxes and isinstance(boxes, list):
+            # If it's a single flat list [y,x,y,x], wrap it
+            if len(boxes) == 4 and all(isinstance(x, (int, float)) for x in boxes):
+                boxes = [boxes]
+            
+            for box in boxes:
+                try:
+                    if not isinstance(box, list) or len(box) < 4:
+                        continue
+                        
+                    # Qwen3-VL returns [ymin, xmin, ymax, xmax]
+                    # Swapping based on previous visual feedback: left=ymin, top=xmin
+                    ymin, xmin, ymax, xmax = box[:4]
+                    
+                    left = ymin * width / 1000
+                    top = xmin * height / 1000
+                    right = ymax * width / 1000
+                    bottom = xmax * height / 1000
+                except (ValueError, TypeError):
+                    continue # Skip malformed boxes
 
-        draw.text((padding + 14, y_pos), label, fill=color_info["primary"], font=font_small)
-        y_pos += line_height
+                # Draw glowing box
+                for i in range(3): # Multi-layered border for glow effect
+                    draw.rectangle(
+                        [left - i, top - i, right + i, bottom + i],
+                        outline=color_info["primary"],
+                        width=2
+                    )
+                
+                # Small ID label near the box
+                draw.text((left + 4, top + 4), name, fill="white", font=font_small)
+
+        # Bounding boxes were drawn above. No text list here.
+        pass
+
 
     # Convert back to RGB for Streamlit display
     img = img.convert("RGB")

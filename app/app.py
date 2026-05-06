@@ -9,7 +9,7 @@ import numpy as np
 from PIL import Image
 
 import config
-from inspector import run_inspection, run_mock_inspection
+from inspector import run_inspection, run_mock_inspection, run_discovery
 from camera import CameraManager, test_camera_connection
 from utils import (
     annotate_image, draw_inspection_badge, format_elapsed_time,
@@ -310,16 +310,66 @@ st.markdown("""
         font-size: 0.85rem;
     }
 
-    /* Timer chip */
-    .timer-chip {
-        display: inline-block;
-        background: #22262E;
+    /* Laser Scanline Animation */
+    .scanline-container {
+        position: relative;
+        overflow: hidden;
+        border-radius: 8px;
         border: 1px solid #2E3340;
-        border-radius: 4px;
-        padding: 0.3rem 0.8rem;
-        color: #8B919A;
-        font-size: 0.85rem;
-        margin-bottom: 0.75rem;
+    }
+    .scanline {
+        position: absolute;
+        top: -100%;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+            to bottom,
+            transparent 0%,
+            rgba(232, 100, 10, 0.1) 40%,
+            rgba(232, 100, 10, 0.8) 50%,
+            rgba(232, 100, 10, 0.1) 60%,
+            transparent 100%
+        );
+        animation: scan 3s linear infinite;
+        z-index: 10;
+        pointer-events: none;
+    }
+    @keyframes scan {
+        from { top: -100%; }
+        to { top: 100%; }
+    }
+
+    /* Cyberpunk Glows */
+    .glow-pass {
+        box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
+        border: 1px solid #10B981 !important;
+    }
+    .glow-fail {
+        box-shadow: 0 0 15px rgba(237, 28, 36, 0.3);
+        border: 1px solid #ED1C24 !important;
+    }
+
+    /* Item card hover */
+    .item-card:hover {
+        border-color: #E8640A !important;
+        transform: translateY(-2px);
+        transition: all 0.3s ease;
+    }
+
+    /* Custom Spinner */
+    .stSpinner > div {
+        border-top-color: #E8640A !important;
+    }
+
+    /* Timer chip pulse */
+    .timer-chip {
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+        0% { opacity: 0.8; }
+        50% { opacity: 1; }
+        100% { opacity: 0.8; }
     }
 
     /* Hide default streamlit elements but keep sidebar button */
@@ -496,8 +546,71 @@ def execute_inspection(image: Image.Image, specification: str):
         return
 
     # Run inspection
-    with st.spinner("🔍 Analyzing on AMD Cloud..."):
-        response = run_inspection(image, specification)
+    with st.spinner("🔍 ANALYZING ON AMD CLOUD..."):
+        # Visual Scanning Effect with Dual Layout
+        scan_placeholder = st.empty()
+        
+        # Helper to convert PIL to base64 for the overlay
+        import io
+        import base64
+        buffered = io.BytesIO()
+        
+        # FIX: Convert to RGB (removes alpha channel) to avoid JPEG save error
+        display_img = image.convert("RGB") if image.mode != "RGB" else image
+        display_img.save(buffered, format="JPEG")
+        img_str = base64.b64encode(buffered.getvalue()).decode()
+
+        # Dual Column Scanning UI
+        col_scan_left, col_scan_right = scan_placeholder.columns([1, 1])
+        
+        with col_scan_left:
+            st.markdown(f"""
+                <div class="scanline-container" style="max-width: 100%;">
+                    <div class="scanline"></div>
+                    <img src="data:image/jpeg;base64,{img_str}" style="width: 100%; border-radius: 8px; opacity: 0.7;">
+                </div>
+                <p style="text-align: center; color: #E8640A; font-size: 0.8rem; letter-spacing: 2px;">VLM SCANNING IN PROGRESS...</p>
+            """, unsafe_allow_html=True)
+            
+        with col_scan_right:
+            log_placeholder = st.empty()
+            logs = [
+                "📡 INITIALIZING AMD MI300X PIPELINE...",
+                "👁️ CAPTURING VISUAL FEATURES...",
+                "🧠 ANALYZING COMPONENT GEOMETRY...",
+                "📋 CROSS-REFERENCING SPECIFICATION...",
+                "🔍 DETECTING RESISTORS AND CAPACITORS...",
+                "⚡ VERIFYING INTEGRITY OF IC CHIPS...",
+                "📏 CALCULATING BOUNDING COORDINATES...",
+                "📊 GENERATING STRUCTURED INSPECTION JSON..."
+            ]
+            
+            # Start the background inspection
+            import threading
+            from concurrent.futures import ThreadPoolExecutor
+            
+            executor = ThreadPoolExecutor(max_workers=1)
+            future = executor.submit(run_inspection, image, specification)
+            
+            # Simulate log typing while waiting
+            for i, log in enumerate(logs):
+                if future.done(): break
+                current_logs = "<br>".join([f'<span style="color: #8B919A;">></span> {l}' for l in logs[:i+1]])
+                log_placeholder.markdown(f"""
+                    <div style="background: #1A1D23; border: 1px solid #2E3340; border-radius: 8px; padding: 1.5rem; font-family: monospace; height: 320px; overflow-y: hidden;">
+                        <h5 style="color: #E8640A; margin-top: 0;">💻 SYSTEM LOG</h5>
+                        <div style="font-size: 0.85rem; line-height: 1.6;">
+                            {current_logs}
+                            <span style="display: inline-block; width: 8px; height: 15px; background: #E8640A; animation: blink 1s infinite;"></span>
+                        </div>
+                    </div>
+                    <style>@keyframes blink {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0; }} }}</style>
+                """, unsafe_allow_html=True)
+                time.sleep(0.8) # Simulated speed
+            
+            response = future.result()
+            
+        scan_placeholder.empty() # Remove scan effect when done
 
     # Handle errors
     if response["error"]:
@@ -641,6 +754,35 @@ with tab_upload:
             key="spec_input"
         )
 
+        # Discovery button
+        if st.button("🔍 Auto-Discover Components", width="stretch", help="Let AI identify everything it sees first"):
+            img_to_disc = uploaded_file if uploaded_file else st.session_state.get("demo_image")
+            
+            if img_to_disc:
+                if isinstance(img_to_disc, Image.Image):
+                    process_img = img_to_disc
+                else:
+                    process_img = Image.open(img_to_disc)
+                
+                with st.spinner("🕵️ DISCOVERING COMPONENTS..."):
+                    discovery_res = run_discovery(process_img)
+                    if discovery_res["error"]:
+                        st.error(f"Discovery Error: {discovery_res['error']}")
+                    else:
+                        st.session_state.discovery_data = discovery_res["result"]
+            else:
+                st.warning("Please upload an image first.")
+
+        # Show discovery results if present
+        if st.session_state.get("discovery_data"):
+            with st.expander("📝 Discovered Components (Use these for your spec)", expanded=True):
+                items = st.session_state.discovery_data.get("discovered_items", [])
+                for it in items:
+                    st.markdown(f"- **{it.get('name', 'Unknown')}**: {it.get('description', 'No description')}")
+                if st.button("Clear Discovery"):
+                    st.session_state.discovery_data = None
+                    st.rerun()
+
     # Run button
     st.markdown("")
     col_run, col_info = st.columns([1, 3])
@@ -649,7 +791,7 @@ with tab_upload:
             "Run Inspection",
             width="stretch",
             type="primary",
-            disabled=uploaded_file is None
+            disabled=(uploaded_file is None and st.session_state.get("demo_image") is None)
         )
     with col_info:
         st.caption(f"🔗 Connected to {config.VLM_MODEL} on AMD Cloud (MI300X)")

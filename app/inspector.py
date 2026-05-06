@@ -112,8 +112,8 @@ def call_vlm(image_b64: str, prompt: str) -> dict:
 
 def parse_vlm_response(response: dict) -> dict:
     """
-    Extract and parse the JSON from the VLM response.
-    Handles various response formats and malformed JSON.
+    Extract and parse JSON from the VLM response.
+    Handles potential markdown fences and trailing text.
     """
     try:
         content = response["choices"][0]["message"]["content"]
@@ -121,30 +121,28 @@ def parse_vlm_response(response: dict) -> dict:
         logger.error(f"Unexpected response structure: {e}")
         raise ValueError(f"Invalid VLM response structure: {e}")
 
-    # Try direct JSON parse first
+    # Clean markdown fences if present
+    clean_text = content.strip()
+    if clean_text.startswith("```"):
+        # Remove starting ```json or ```
+        clean_text = clean_text.split("\n", 1)[-1]
+        # Remove ending ```
+        if clean_text.endswith("```"):
+            clean_text = clean_text.rsplit("```", 1)[0]
+    
+    # Try to find the first '{' and last '}' in case there is garbage text
     try:
-        return json.loads(content)
-    except json.JSONDecodeError:
-        pass
-
-    # Try extracting JSON from markdown code blocks
-    import re
-    json_patterns = [
-        r'```json\s*(.*?)\s*```',
-        r'```\s*(.*?)\s*```',
-        r'(\{.*\})',
-    ]
-
-    for pattern in json_patterns:
-        match = re.search(pattern, content, re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group(1))
-            except json.JSONDecodeError:
-                continue
-
-    logger.error(f"Failed to parse JSON from VLM response: {content[:500]}")
-    raise ValueError(f"VLM returned non-JSON response. Raw content: {content[:200]}...")
+        start_idx = clean_text.find("{")
+        end_idx = clean_text.rfind("}")
+        if start_idx != -1 and end_idx != -1:
+            json_str = clean_text[start_idx:end_idx + 1]
+            return json.loads(json_str)
+        
+        # If no braces found, try direct load
+        return json.loads(clean_text)
+    except Exception as e:
+        logger.error(f"Failed to parse JSON from VLM response: {content[:500]}")
+        raise ValueError(f"Failed to parse JSON: {str(e)}")
 
 
 def validate_result(result: dict) -> dict:
@@ -265,6 +263,37 @@ def run_inspection(image: Image.Image, specification: str) -> dict:
         "elapsed": elapsed,
         "error": f"All {VLM_MAX_RETRIES} attempts failed. Last error: {last_error}"
     }
+
+
+def run_discovery(image: Image.Image) -> dict:
+    """
+    Experimental 'Discovery Mode' to identify all visible components.
+    Returns a descriptive list of what the VLM sees.
+    """
+    prompt = (
+        "Identify every physical component visible in this image. "
+        "For each item, provide a clear name and a very brief description of its appearance. "
+        "Also include its bounding box coordinates [ymin, xmin, ymax, xmax] normalized to 1000. "
+        "Return ONLY a JSON object with a list of 'discovered_items'."
+    )
+    
+    start_time = time.time()
+    try:
+        image_b64 = prepare_image(image)
+        raw_response = call_vlm(image_b64, prompt)
+        result = parse_vlm_response(raw_response)
+        
+        return {
+            "result": result,
+            "elapsed": time.time() - start_time,
+            "error": None
+        }
+    except Exception as e:
+        return {
+            "result": None,
+            "elapsed": time.time() - start_time,
+            "error": str(e)
+        }
 
 
 # ─── Mock Inspection (for offline development) ────────────────────────
