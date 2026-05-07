@@ -16,6 +16,7 @@ from utils import (
     get_status_icon, get_status_color, get_status_bg_color,
     calculate_pass_rate, create_history_entry, COLORS
 )
+from report import generate_inspection_report, get_report_filename
 
 # ─── Page Configuration ───────────────────────────────────────────────
 
@@ -655,7 +656,7 @@ def execute_inspection(image: Image.Image, specification: str):
         st.markdown("##### 🖼️ Annotated Image")
         annotated = annotate_image(image, result.get("items", []))
         annotated = draw_inspection_badge(annotated, passed)
-        st.image(annotated, width="stretch")
+        st.image(annotated, use_container_width=True)
 
     with col_details:
         st.markdown("##### 📊 Item Details")
@@ -691,6 +692,32 @@ def execute_inspection(image: Image.Image, specification: str):
     if result.get("notes"):
         st.caption(f"📋 Notes: {result['notes']}")
 
+    # ── Download Report ──
+    st.markdown("---")
+    report_html = generate_inspection_report(
+        result=result,
+        specification=specification,
+        elapsed=elapsed,
+        original_image=image,
+        annotated_image=annotated,
+    )
+    report_filename = get_report_filename()
+
+    col_dl, col_dl_info = st.columns([1, 3])
+    with col_dl:
+        st.download_button(
+            label="📄 Download Inspection Report",
+            data=report_html,
+            file_name=report_filename,
+            mime="text/html",
+            use_container_width=True,
+        )
+    with col_dl_info:
+        st.caption(
+            "Self-contained HTML report with full inspection results, "
+            "annotated images, and metadata. Open in any browser or print to PDF."
+        )
+
     # Save to history
     history_entry = create_history_entry(image, result, elapsed, specification)
     st.session_state.history.append(history_entry)
@@ -722,7 +749,7 @@ with tab_upload:
         if uploaded_file:
             st.session_state.demo_image = None # Clear demo if user uploads
             image = Image.open(uploaded_file)
-            st.image(image, caption="Uploaded image", width="stretch")
+            st.image(image, caption="Uploaded image", use_container_width=True)
         
         # Demo button
         if st.button("🖼️ Use Demo PCB Sample", width="stretch", help="Load a pre-configured sample image for testing"):
@@ -731,7 +758,7 @@ with tab_upload:
             st.rerun()
 
         if st.session_state.get("demo_image"):
-            st.image(st.session_state.demo_image, caption="Demo PCB Sample Loaded", width="stretch")
+            st.image(st.session_state.demo_image, caption="Demo PCB Sample Loaded", use_container_width=True)
             image = st.session_state.demo_image
 
     with col_input_spec:
@@ -869,7 +896,7 @@ with tab_camera:
                         camera_placeholder.image(
                             CameraManager.frame_to_rgb(frame),
                             caption="Live feed — hold object still for auto-capture",
-                            width="stretch"
+                            use_container_width=True
                         )
 
                         # Check stability
@@ -915,7 +942,7 @@ with tab_camera:
                     camera_placeholder.image(
                         CameraManager.frame_to_rgb(frame),
                         caption="Captured frame",
-                        width="stretch"
+                        use_container_width=True
                     )
                     cam.disconnect()
                     execute_inspection(pil_image, spec_cam)
