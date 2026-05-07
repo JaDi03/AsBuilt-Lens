@@ -96,6 +96,19 @@ st.markdown("""
         letter-spacing: 0.03em;
     }
 
+    /* Standardized Image Container */
+    [data-testid="stImage"] img {
+        max-height: 450px !important;
+        width: auto !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        display: block !important;
+        object-fit: contain !important;
+        border-radius: 8px;
+        border: 1px solid #2E3340;
+        background-color: #0E1117;
+    }
+
     /* Light text for everything */
     h1, h2, h3, h4, h5, h6, label, p, span, div, .stCaption {
         color: #FFFFFF !important;
@@ -670,10 +683,10 @@ def render_inspection_results(result, image, annotated, specification, elapsed):
     # Comparison View: Original vs Annotated
     col_orig, col_anno = st.columns(2)
     with col_orig:
-        st.markdown("##### [IMG] Original Image")
+        st.markdown("##### [IMG] ORIGINAL")
         st.image(image, use_container_width=True)
     with col_anno:
-        st.markdown("##### [IMG] Annotated Result")
+        st.markdown("##### [IMG] ANNOTATED")
         st.image(annotated, use_container_width=True)
 
     st.markdown("---")
@@ -945,9 +958,9 @@ def render_batch_results(batch_data):
                 # Side-by-side comparison for batch items
                 c1, c2 = st.columns(2)
                 with c1:
-                    st.image(r["original_image"], caption="Original", use_container_width=True)
+                    st.image(r["original_image"], use_container_width=True)
                 with c2:
-                    st.image(r["annotated_image"], caption="Annotated", use_container_width=True)
+                    st.image(r["annotated_image"], use_container_width=True)
                 
                 with st.expander("[DATA] Details"):
                     st.caption(f"Time: {r['elapsed']:.2f}s")
