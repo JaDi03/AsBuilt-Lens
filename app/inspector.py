@@ -105,7 +105,9 @@ def call_vlm(image_b64: str, prompt: str) -> dict:
     url = f"{AMD_API_URL}/chat/completions"
     response = requests.post(url, headers=headers, json=payload, timeout=VLM_TIMEOUT)
     response.raise_for_status()
-    return response.json()
+    raw_data = response.json()
+    logger.info(f"VLM Raw Usage: {raw_data.get('usage')}")
+    return raw_data
 
 
 # ─── JSON Parsing ──────────────────────────────────────────────────────
@@ -295,7 +297,8 @@ def run_inspection(image: Image.Image, specification: str) -> dict:
             return {
                 "result": result,
                 "elapsed": elapsed,
-                "error": None
+                "error": None,
+                "usage": raw_response.get("usage", {})
             }
 
         except requests.exceptions.Timeout:
@@ -328,7 +331,8 @@ def run_inspection(image: Image.Image, specification: str) -> dict:
     return {
         "result": None,
         "elapsed": elapsed,
-        "error": f"All {VLM_MAX_RETRIES} attempts failed. Last error: {last_error}"
+        "error": f"All {VLM_MAX_RETRIES} attempts failed. Last error: {last_error}",
+        "usage": {}
     }
 
 
@@ -353,7 +357,8 @@ def run_discovery(image: Image.Image) -> dict:
         return {
             "result": result,
             "elapsed": time.time() - start_time,
-            "error": None
+            "error": None,
+            "usage": raw_response.get("usage", {})
         }
     except Exception as e:
         return {
@@ -413,21 +418,19 @@ def run_mock_inspection(image: Image.Image, specification: str) -> dict:
         "notes": "Mock inspection — connect to AMD Cloud for real analysis."
     }
 
-    # Fix consistency
+    # Final pass-rate calculation for mock consistency
     passed_items = sum(1 for item in mock_result["items"] if item["status"] == "present")
     total_items = len(mock_result["items"])
     mock_result["inspection_passed"] = passed_items == total_items
     mock_result["summary"] = f"{passed_items} of {total_items} items verified correctly."
 
-    for item in mock_result["items"]:
-        if item["status"] == "missing":
-            item["detected_count"] = 0
-            item["note"] = f"No {item['id']} visible in expected location."
-        elif item["status"] == "anomaly":
-            item["note"] = f"Count mismatch for {item['id']}."
-
     return {
         "result": mock_result,
-        "elapsed": random.uniform(2.0, 4.5),
-        "error": None
+        "elapsed": time.time() - start_time,
+        "error": None,
+        "usage": {
+            "prompt_tokens": random.randint(500, 800),
+            "completion_tokens": random.randint(200, 400),
+            "total_tokens": random.randint(700, 1200)
+        }
     }

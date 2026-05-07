@@ -38,10 +38,10 @@ COLORS = {
 }
 
 STATUS_ICONS = {
-    "present": "✅",
-    "missing": "❌",
-    "anomaly": "⚠️",
-    "unexpected": "🟣"
+    "present": "[PASS]",
+    "missing": "[FAIL]",
+    "anomaly": "[WARN]",
+    "unexpected": "[UNEX]"
 }
 
 
@@ -149,10 +149,10 @@ def draw_inspection_badge(image: Image.Image, passed: bool) -> Image.Image:
 
     if passed:
         bg_color = (16, 185, 129, 220)    # Emerald green
-        text = "✅ PASS"
+        text = "PASS"
     else:
         bg_color = (237, 28, 36, 220)     # AMD Red
-        text = "❌ FAIL"
+        text = "FAIL"
 
     draw.rounded_rectangle([x, y, x + badge_w, y + badge_h], radius=10, fill=bg_color)
 
@@ -245,6 +245,7 @@ def create_history_entry(
         "passed_count": passed,
         "total_count": total,
         "elapsed": elapsed,
+        "usage": result.get("usage", {}),
         "summary": result.get("summary", ""),
         "full_specification": specification,
         "specification_short": specification[:100] + "..." if len(specification) > 100 else specification,

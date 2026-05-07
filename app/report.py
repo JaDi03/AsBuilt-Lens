@@ -41,10 +41,10 @@ def _get_status_color(status: str) -> str:
 def _get_status_label(status: str) -> str:
     """Get the display label for a given status."""
     labels = {
-        "present": "✅ PRESENT",
-        "missing": "❌ MISSING",
-        "anomaly": "⚠️ ANOMALY",
-        "unexpected": "🟣 UNEXPECTED",
+        "present": "[PASS] PRESENT",
+        "missing": "[FAIL] MISSING",
+        "anomaly": "[WARN] ANOMALY",
+        "unexpected": "[UNEX] UNEXPECTED",
     }
     return labels.get(status, "❓ UNKNOWN")
 
@@ -176,7 +176,7 @@ def generate_inspection_report(
             
         car_html = f"""
         <div class="section" style="border-color: rgba(237, 28, 36, 0.5);">
-            <h3 style="color: #ED1C24;">⚠️ Corrective Action Request (CAR)</h3>
+            <h3 style="color: #ED1C24;">[WARN] Corrective Action Request (CAR)</h3>
             <p style="font-size: 0.85rem; color: #8B919A; margin-bottom: 1rem;">
                 The autonomous agent has identified the following required actions based on the MES database:
             </p>
@@ -412,7 +412,7 @@ def generate_inspection_report(
     <div class="container">
         <!-- Header -->
         <div class="header">
-            <h1>🔍 AsBuilt Lens</h1>
+            <h1>[SYSTEM] AsBuilt Lens</h1>
             <p class="tagline">Describe what should exist. The AI verifies it visually.</p>
             <div class="report-type">Inspection Report</div>
         </div>
@@ -446,7 +446,7 @@ def generate_inspection_report(
         
         <!-- Inspection Metadata -->
         <div class="section">
-            <h3>📋 Inspection Details</h3>
+            <h3>[DETAILS] Inspection</h3>
             <div class="meta-grid">
                 <div class="meta-item">
                     <div class="label">Job / Lot Number</div>
@@ -481,7 +481,7 @@ def generate_inspection_report(
         
         <!-- Specification -->
         <div class="section">
-            <h3>📝 Inspection Specification</h3>
+            <h3>[SPEC] Inspection Specification</h3>
             <div class="summary-text">
                 <pre style="white-space: pre-wrap; font-family: inherit; margin: 0;">{specification}</pre>
             </div>
@@ -489,7 +489,7 @@ def generate_inspection_report(
         
         <!-- Images -->
         <div class="section">
-            <h3>🖼️ Inspection Images</h3>
+            <h3>[IMG] Inspection Images</h3>
             <div class="images-grid{' single' if not (original_img_html and annotated_img_html) else ''}">
                 {"<div>" + "<p class='image-label'>Original</p>" + original_img_html + "</div>" if original_img_html else ""}
                 {"<div>" + "<p class='image-label'>Annotated Result</p>" + annotated_img_html + "</div>" if annotated_img_html else ""}
@@ -498,7 +498,7 @@ def generate_inspection_report(
         
         <!-- Item Details -->
         <div class="section">
-            <h3>📊 Item-by-Item Results</h3>
+            <h3>[DATA] Item-by-Item Results</h3>
             <div style="overflow-x: auto;">
                 <table>
                     <thead>
@@ -520,7 +520,7 @@ def generate_inspection_report(
         
         <!-- Summary -->
         <div class="section">
-            <h3>📝 Summary</h3>
+            <h3>[LOG] Summary</h3>
             <div class="summary-text">{summary}</div>
             {"<div class='summary-text' style='margin-top:0.75rem; border-left-color:#F59E0B;'><strong>Notes:</strong> " + notes + "</div>" if notes else ""}
         </div>
@@ -545,3 +545,159 @@ def get_report_filename() -> str:
     """Generate a timestamped filename for the report."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return f"AsBuilt_Lens_Report_{timestamp}.html"
+
+
+def generate_batch_report(batch_data: Dict) -> str:
+    """
+    Generate a self-contained HTML consolidated batch inspection report.
+    """
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    total_imgs = batch_data["images_count"]
+    total_elapsed = batch_data["total_elapsed"]
+    img_per_min = (total_imgs / total_elapsed) * 60 if total_elapsed > 0 else 0
+    
+    results = batch_data["results"]
+    
+    passed_count = sum(1 for r in results if not r.get("error") and r.get("result") and r["result"].get("inspection_passed"))
+    
+    verdict_color = "#10B981" if passed_count == total_imgs else "#F59E0B"
+    verdict_text = "ALL PASSED" if passed_count == total_imgs else "PARTIAL PASS"
+    if passed_count == 0:
+        verdict_color = "#ED1C24"
+        verdict_text = "ALL FAILED"
+        
+    verdict_border = verdict_color
+    verdict_bg = "rgba(16, 185, 129, 0.15)" if passed_count == total_imgs else "rgba(245, 158, 11, 0.15)"
+    
+    # Generate rows for each image
+    images_rows = ""
+    for i, r in enumerate(results):
+        if r.get("error"):
+            status_html = '<span style="color:#ED1C24; font-weight:bold;">[ERROR]</span>'
+            img_html = ""
+            details = r["error"]
+        else:
+            res_data = r["result"]
+            passed = res_data.get("inspection_passed", False)
+            status_color = "#10B981" if passed else "#ED1C24"
+            status_text = "[PASS]" if passed else "[FAIL]"
+            status_html = f'<span style="color:{status_color}; font-weight:bold;">{status_text}</span>'
+            
+            b64 = _encode_image_to_base64(r["annotated_image"], max_width=400)
+            img_html = f'<img src="data:image/jpeg;base64,{b64}" style="width:100%; max-width:300px; border-radius:4px;">'
+            
+            # Simple details
+            items = res_data.get("items", [])
+            details = "<ul style='margin-left: 20px; font-size: 0.85rem;'>"
+            for item in items:
+                st_name = item.get("id", "unknown").replace("_", " ").title()
+                st_stat = item.get("status", "present").upper()
+                c_color = _get_status_color(item.get("status", "present"))
+                details += f"<li>{st_name}: <span style='color:{c_color}'>[{st_stat}]</span></li>"
+            details += "</ul>"
+        
+        images_rows += f"""
+        <tr>
+            <td style="text-align:center; font-weight:bold;">#{i+1}</td>
+            <td style="text-align:center;">{status_html}</td>
+            <td style="text-align:center;">{img_html}</td>
+            <td>{details}</td>
+        </tr>
+        """
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AsBuilt Lens — Batch Inspection Report — {timestamp}</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: 'Inter', sans-serif; background: #1A1D23; color: #FFFFFF; line-height: 1.6; }}
+        .container {{ max-width: 1000px; margin: 0 auto; padding: 2rem; }}
+        .header {{ text-align: center; padding: 2rem 0; border-bottom: 2px solid #E8640A; margin-bottom: 2rem; }}
+        .header h1 {{ font-size: 1.8rem; font-weight: 700; color: #FFFFFF; margin-bottom: 0.25rem; }}
+        .header .tagline {{ color: #8B919A; font-size: 0.9rem; font-weight: 300; }}
+        .header .report-type {{ display: inline-block; background: #E8640A; color: white; padding: 0.3rem 1rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; margin-top: 1rem; }}
+        .verdict {{ background: {verdict_bg}; border: 2px solid {verdict_border}; border-radius: 10px; padding: 1.5rem; text-align: center; margin-bottom: 2rem; }}
+        .verdict h2 {{ font-size: 2rem; font-weight: 800; color: {verdict_color}; letter-spacing: 0.05em; }}
+        .verdict .stats {{ display: flex; justify-content: center; gap: 2rem; margin-top: 0.75rem; flex-wrap: wrap; }}
+        .verdict .stat {{ text-align: center; }}
+        .verdict .stat .value {{ font-size: 1.3rem; font-weight: 700; color: #FFFFFF; }}
+        .verdict .stat .label {{ font-size: 0.7rem; color: #8B919A; text-transform: uppercase; letter-spacing: 0.05em; }}
+        .section {{ background: #22262E; border: 1px solid #2E3340; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; }}
+        .section h3 {{ color: #E8640A; font-size: 1rem; font-weight: 600; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.05em; }}
+        table {{ width: 100%; border-collapse: collapse; }}
+        th {{ background: #1A1D23; color: #8B919A; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #2E3340; }}
+        td {{ padding: 0.75rem 1rem; border-bottom: 1px solid #2E3340; color: #FFFFFF; font-size: 0.9rem; vertical-align: middle; }}
+        .footer {{ text-align: center; padding: 2rem 0 1rem; border-top: 1px solid #2E3340; margin-top: 2rem; }}
+        .footer p {{ color: #5A5F6A; font-size: 0.75rem; }}
+        .footer .brand {{ color: #E8640A; font-weight: 600; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>[SYSTEM] AsBuilt Lens</h1>
+            <p class="tagline">Consolidated Batch Inspection</p>
+            <div class="report-type">Batch Report</div>
+        </div>
+        
+        <div class="verdict">
+            <h2>BATCH RESULT: {verdict_text}</h2>
+            <div class="stats">
+                <div class="stat">
+                    <div class="value">{passed_count}/{total_imgs}</div>
+                    <div class="label">Images Passed</div>
+                </div>
+                <div class="stat">
+                    <div class="value">{total_elapsed:.1f}s</div>
+                    <div class="label">Total Time</div>
+                </div>
+                <div class="stat">
+                    <div class="value">{img_per_min:.1f}</div>
+                    <div class="label">Img / Min Throughput</div>
+                </div>
+                <div class="stat">
+                    <div class="value">Parallel</div>
+                    <div class="label">Execution Mode</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h3>[SPEC] Specification Applied</h3>
+            <div style="background: #1A1D23; border-left: 3px solid #E8640A; padding: 1rem; border-radius: 0 8px 8px 0; font-family: monospace; font-size: 0.9rem; white-space: pre-wrap;">{batch_data["specification"]}</div>
+        </div>
+        
+        <div class="section">
+            <h3>[DATA] Batch Results</h3>
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="text-align:center; width: 60px;">ID</th>
+                            <th style="text-align:center; width: 100px;">Status</th>
+                            <th style="text-align:center; width: 320px;">Image</th>
+                            <th>Item Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {images_rows}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Generated by <span class="brand">AsBuilt Lens</span> — Zero-Shot Visual Inspection</p>
+            <p>AMD Developer Hackathon 2026 · Track 3: Vision & Multimodal AI</p>
+            <p>Report generated: {timestamp}</p>
+        </div>
+    </div>
+</body>
+</html>"""
+    return html
+

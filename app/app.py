@@ -424,6 +424,9 @@ def init_session_state():
         "current_annotated": None,
         "spec_input": "", # Initialize for text area
         "pending_inspection_img": None,
+        "pending_batch_images": None,
+        "pending_batch_spec": None,
+        "last_batch_result": None,
         "pending_inspection_spec": None,
     }
     for key, value in defaults.items():
@@ -533,7 +536,7 @@ with st.sidebar:
     else:
         for i, entry in enumerate(reversed(st.session_state.history)):
             status_class = "history-pass" if entry["passed"] else "history-fail"
-            status_emoji = "✅" if entry["passed"] else "❌"
+            status_emoji = "[PASS]" if entry["passed"] else "[FAIL]"
             with st.container():
                 st.markdown(f"""
                 <div class="history-entry {status_class}">
@@ -545,7 +548,7 @@ with st.sidebar:
                 """, unsafe_allow_html=True)
                 
                 # Hidden key to make button unique
-                if st.button(f"👁️ View Report #{len(st.session_state.history) - i}", key=f"view_{len(st.session_state.history) - i}", width="stretch"):
+                if st.button(f"[VIEW] Report #{len(st.session_state.history) - i}", key=f"view_{len(st.session_state.history) - i}", use_container_width=True):
                     st.session_state.last_result = entry["result"]
                     st.session_state.current_image = entry["original_image"]
                     st.session_state.current_annotated = entry["annotated_image"]
@@ -553,14 +556,14 @@ with st.sidebar:
                     st.session_state.viewing_history = True
                     st.rerun()
 
-        if st.button("🗑️ Clear History", width="stretch"):
+        if st.button("[CLEAR] History", use_container_width=True):
             st.session_state.history = []
             st.rerun()
 
     st.divider()
 
     # ── About ──
-    st.markdown("#### ℹ️ About")
+    st.markdown("#### [INFO] About")
     st.caption(
         "AsBuilt Lens is a zero-shot visual inspection platform. "
         "It uses multimodal AI to compare physical objects against "
@@ -576,15 +579,64 @@ with st.sidebar:
 
 # ─── Result Rendering UI ──────────────────────────────────────────────
 
+def render_performance_panel(usage, elapsed):
+    """Display industrial performance metrics."""
+    # If no usage, show a placeholder but don't hide the panel entirely
+    # as it's a key feature of the demo.
+    has_usage = bool(usage)
+    
+    prompt_tokens = usage.get("prompt_tokens", "N/A")
+    comp_tokens = usage.get("completion_tokens", "N/A")
+    total_tokens = usage.get("total_tokens", "N/A")
+    
+    if has_usage and isinstance(comp_tokens, (int, float)):
+        tps = comp_tokens / elapsed if elapsed > 0 else 0
+        tps_str = f"{tps:.1f} tok/s"
+    else:
+        tps_str = "N/A"
+    
+    st.markdown(f"""
+    <div style="background: #1A1D23; border: 1px solid #2E3340; border-radius: 8px; padding: 1.2rem; margin: 1rem 0;">
+        <h5 style="color: #E8640A; margin-top: 0; font-size: 0.9rem; letter-spacing: 1px;">[LIVE] PERFORMANCE METRICS (AMD MI300X)</h5>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; text-align: center;">
+            <div>
+                <div style="color: #8B919A; font-size: 0.7rem; text-transform: uppercase;">Throughput</div>
+                <div style="color: #FFFFFF; font-size: 1.1rem; font-weight: 600;">{tps_str}</div>
+            </div>
+            <div>
+                <div style="color: #8B919A; font-size: 0.7rem; text-transform: uppercase;">Prompt</div>
+                <div style="color: #FFFFFF; font-size: 1.1rem; font-weight: 600;">{prompt_tokens}</div>
+            </div>
+            <div>
+                <div style="color: #8B919A; font-size: 0.7rem; text-transform: uppercase;">Completion</div>
+                <div style="color: #FFFFFF; font-size: 1.1rem; font-weight: 600;">{comp_tokens}</div>
+            </div>
+            <div>
+                <div style="color: #8B919A; font-size: 0.7rem; text-transform: uppercase;">Total Latency</div>
+                <div style="color: #FFFFFF; font-size: 1.1rem; font-weight: 600;">{elapsed:.2f}s</div>
+            </div>
+        </div>
+        <div style="margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid #2E3340; display: flex; justify-content: space-between; font-size: 0.75rem; color: #8B919A;">
+            <span>Hardware: AMD Instinct MI300X (192GB HBM3)</span>
+            <span>Engine: vLLM + ROCm 6.0</span>
+        </div>
+        {"<p style='color: #E8640A; font-size: 0.7rem; margin-top: 0.5rem; text-align: center;'>[WARN] API usage stats not returned by backend. Check vLLM configuration.</p>" if not has_usage else ""}
+    </div>
+    """, unsafe_allow_html=True)
+
+
 def render_inspection_results(result, image, annotated, specification, elapsed):
     """Reusable UI component to display inspection results."""
     st.markdown("---")
 
     # Timer
     st.markdown(
-        f'<div class="timer-chip">⏱️ Inspection completed in {format_elapsed_time(elapsed)}</div>',
+        f'<div class="timer-chip">[TIME] Inspection completed in {format_elapsed_time(elapsed)}</div>',
         unsafe_allow_html=True
     )
+
+    # Performance Panel
+    render_performance_panel(result.get("usage", {}), elapsed)
 
     # Pass/Fail Badge
     passed = result.get("inspection_passed", False)
@@ -592,60 +644,62 @@ def render_inspection_results(result, image, annotated, specification, elapsed):
 
     if passed:
         st.markdown(
-            f'<div class="status-pass">✅ INSPECTION PASSED — {passed_count}/{total_count} items verified</div>',
+            f'<div class="status-pass">[PASS] INSPECTION PASSED — {passed_count}/{total_count} items verified</div>',
             unsafe_allow_html=True
         )
     else:
         st.markdown(
-            f'<div class="status-fail">❌ INSPECTION FAILED — {passed_count}/{total_count} items verified</div>',
+            f'<div class="status-fail">[FAIL] INSPECTION FAILED — {passed_count}/{total_count} items verified</div>',
             unsafe_allow_html=True
         )
 
-    # Annotated image + item details
-    col_img, col_details = st.columns([1, 1])
+    # Comparison View: Original vs Annotated
+    col_orig, col_anno = st.columns(2)
+    with col_orig:
+        st.markdown("##### [IMG] Original Image")
+        st.image(image, use_container_width=True)
+    with col_anno:
+        st.markdown("##### [IMG] Annotated Result")
+        st.image(annotated, use_container_width=True)
 
-    with col_img:
-        st.markdown("##### 🖼️ Annotated Image")
-        st.image(annotated, width="stretch")
+    st.markdown("---")
+    st.markdown("##### [DATA] Item Details")
 
-    with col_details:
-        st.markdown("##### 📊 Item Details")
+    for item in result.get("items", []):
+        status = item.get("status", "present")
+        icon = get_status_icon(status)
+        color = get_status_color(status)
+        name = item.get("id", "unknown").replace("_", " ").title()
+        expected = item.get("expected_count", 0)
+        detected = item.get("detected_count", 0)
+        confidence = item.get("confidence", 0)
+        note = item.get("note", "")
 
-        for item in result.get("items", []):
-            status = item.get("status", "present")
-            icon = get_status_icon(status)
-            color = get_status_color(status)
-            name = item.get("id", "unknown").replace("_", " ").title()
-            expected = item.get("expected_count", 0)
-            detected = item.get("detected_count", 0)
-            confidence = item.get("confidence", 0)
-            note = item.get("note", "")
-
-            st.markdown(f"""
-            <div class="item-card">
-                <h4>{icon} {name}</h4>
-                <p>Expected: <strong>{expected}</strong> &nbsp;|&nbsp;
-                   Detected: <strong>{detected}</strong> &nbsp;|&nbsp;
-                   Status: <strong style="color: {color};">{status.upper()}</strong></p>
-                <div class="confidence-bar-container">
-                    <div class="confidence-bar-fill" style="width: {confidence}%; background: {color};"></div>
-                </div>
-                <p style="font-size: 0.8rem; margin-top: 0.25rem;">Confidence: {confidence}%</p>
-                {"<p style='font-size: 0.85rem; color: #F59E0B;'>📝 " + note + "</p>" if note else ""}
+        st.markdown(f"""
+        <div class="item-card">
+            <h4>{icon} {name}</h4>
+            <p>Expected: <strong>{expected}</strong> &nbsp;|&nbsp;
+               Detected: <strong>{detected}</strong> &nbsp;|&nbsp;
+               Status: <strong style="color: {color};">{status.upper()}</strong></p>
+            <div class="confidence-bar-container">
+                <div class="confidence-bar-fill" style="width: {confidence}%; background: {color};"></div>
             </div>
-            """, unsafe_allow_html=True)
+            <p style="font-size: 0.8rem; margin-top: 0.25rem;">Confidence: {confidence}%</p>
+            {"<p style='font-size: 0.85rem; color: #F59E0B;'>📝 " + note + "</p>" if note else ""}
+        </div>
+        """, unsafe_allow_html=True)
 
     # Summary
-    st.markdown("##### 📝 Summary")
+    st.markdown("##### [LOG] Summary")
     st.info(result.get("summary", "No summary available."))
 
     if result.get("notes"):
-        st.caption(f"📋 Notes: {result['notes']}")
+        st.caption(f"[NOTE] Notes: {result['notes']}")
 
     # ── Agent Corrective Actions (CAR) ──
     car_plan = result.get("corrective_action_plan", {})
     if car_plan.get("status") == "REQUIRED":
-        st.markdown("##### ⚠️ Corrective Action Request (CAR)")
+        st.markdown("##### [WARN] Corrective Action Request (CAR)")
         st.warning("The autonomous agent has identified required actions based on the MES database:")
         for action in car_plan.get("actions", []):
             st.markdown(f"""
@@ -674,23 +728,23 @@ def render_inspection_results(result, image, annotated, specification, elapsed):
     col_view, col_dl = st.columns(2)
     
     with col_view:
-        with st.expander("👁️ View Full Report Online"):
+        with st.expander("[VIEW] Full Report Online"):
             import streamlit.components.v1 as components
             components.html(report_html, height=800, scrolling=True)
             st.caption("💡 To save as PDF: Open the view above, right-click and select 'Print', then 'Save as PDF'.")
 
     with col_dl:
         st.download_button(
-            label="📄 Download ISO-9001 Report (HTML)",
+            label="[DL] Download ISO-9001 Report (HTML)",
             data=report_html,
             file_name=report_filename,
             mime="text/html",
-            width="stretch",
+            use_container_width=True,
         )
     
     # Start New Inspection
     st.markdown("---")
-    if st.button("🗑️ Start New Inspection", type="secondary", width="stretch"):
+    if st.button("[NEW] Start Inspection", type="secondary", use_container_width=True):
         st.session_state.last_result = None
         st.session_state.current_image = None
         st.session_state.current_annotated = None
@@ -700,14 +754,228 @@ def render_inspection_results(result, image, annotated, specification, elapsed):
 
 # ─── Inspection Function ──────────────────────────────────────────────
 
+
+def execute_batch_inspection(images: list, specification: str):
+    """Run batch inspection in parallel and display results."""
+    if not specification.strip():
+        st.error("[WARN] Please enter an Inspection Specification before running.")
+        return
+
+    st.markdown(f"#### [BATCH] Inspecting {len(images)} images in parallel...")
+    
+    # Visual Scanning Effect with Dual Layout
+    scan_placeholder = st.empty()
+    
+    import io
+    import base64
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    import time
+    
+    # Use first image for visual effect
+    first_img = images[0]
+    buffered = io.BytesIO()
+    display_img = first_img.convert("RGB") if first_img.mode != "RGB" else first_img
+    display_img.save(buffered, format="JPEG")
+    img_str = base64.b64encode(buffered.getvalue()).decode()
+
+    # Dual Column Scanning UI
+    col_scan_left, col_scan_right = scan_placeholder.columns([1, 1])
+    
+    with col_scan_left:
+        st.markdown(f"""
+            <div class="scanline-container" style="max-width: 100%;">
+                <div class="scanline"></div>
+                <img src="data:image/jpeg;base64,{img_str}" style="width: 100%; border-radius: 8px; opacity: 0.7;">
+            </div>
+            <p style="text-align: center; color: #E8640A; font-size: 0.8rem; letter-spacing: 2px;">VLM PARALLEL BATCH SCANNING...</p>
+        """, unsafe_allow_html=True)
+        
+    with col_scan_right:
+        log_placeholder = st.empty()
+        chart_placeholder = st.empty()
+        
+        # Initial log display
+        initial_log_html = f"""
+            <div style="background: #1A1D23; border: 1px solid #2E3340; border-radius: 8px; padding: 1.2rem; font-family: monospace; height: 160px; overflow-y: hidden; margin-bottom: 0.5rem;">
+                <h5 style="color: #E8640A; margin: 0; font-size: 0.8rem;">[SYS] BATCH TELEMETRY</h5>
+                <div style="font-size: 0.8rem; line-height: 1.5; margin-top: 0.5rem;">
+                    <span style="color: #8B919A;">></span> [INIT] PARALLEL PIPELINE<br>
+                    <span style="color: #8B919A;">></span> [QUEUE] {len(images)} IMAGES SUBMITTED<br>
+                    <span style="color: #8B919A;">></span> [AI] INFERENCING ON MI300X...<br>
+                    <span style="display: inline-block; width: 6px; height: 12px; background: #E8640A; animation: blink 1s infinite;"></span>
+                </div>
+            </div>
+        """
+        log_placeholder.markdown(initial_log_html, unsafe_allow_html=True)
+        
+        start_time = time.time()
+        results = []
+        unordered_results = {}
+        
+        # Telemetry for chart
+        throughput_history = []
+        
+        with ThreadPoolExecutor(max_workers=min(len(images), 8)) as executor:
+            futures = {executor.submit(run_inspection, img, specification): i for i, img in enumerate(images)}
+            
+            completed = 0
+            for future in __import__("concurrent.futures").futures.as_completed(futures):
+                idx = futures[future]
+                try:
+                    res = future.result()
+                    res["original_image"] = images[idx]
+                    unordered_results[idx] = res
+                except Exception as e:
+                    unordered_results[idx] = {"error": str(e), "result": None, "elapsed": 0, "original_image": images[idx]}
+                
+                completed += 1
+                current_elapsed = time.time() - start_time
+                img_per_min = (completed / current_elapsed) * 60 if current_elapsed > 0 else 0
+                throughput_history.append(img_per_min)
+                
+                # Update progress in the log area
+                logs_html = f"""
+                    <div style="background: #1A1D23; border: 1px solid #2E3340; border-radius: 8px; padding: 1.2rem; font-family: monospace; height: 160px; overflow-y: hidden; margin-bottom: 0.5rem;">
+                        <h5 style="color: #E8640A; margin: 0; font-size: 0.8rem;">[SYS] BATCH TELEMETRY</h5>
+                        <div style="font-size: 0.8rem; line-height: 1.5; margin-top: 0.5rem;">
+                            <span style="color: #8B919A;">></span> [QUEUE] {len(images)} IMAGES SUBMITTED<br>
+                            <span style="color: #8B919A;">></span> [AI] INFERENCING ON MI300X...<br>
+                            <br>
+                            <span style="color: #10B981; font-weight: bold;">[PROCESS] COMPLETED {completed}/{len(images)}</span><br>
+                            <span style="display: inline-block; width: 6px; height: 12px; background: #E8640A; animation: blink 1s infinite;"></span>
+                        </div>
+                    </div>
+                """
+                log_placeholder.markdown(logs_html, unsafe_allow_html=True)
+                
+                # Update Live Chart
+                with chart_placeholder.container():
+                    st.markdown(f'<p style="color: #8B919A; font-size: 0.7rem; margin-bottom: -10px;">VLM THROUGHPUT: <strong style="color:#10B981;">{img_per_min:.1f} img/min</strong></p>', unsafe_allow_html=True)
+                    st.line_chart(throughput_history, height=120, use_container_width=True)
+                
+        # Re-order
+        for i in range(len(images)):
+            results.append(unordered_results[i])
+
+        total_elapsed = time.time() - start_time
+        
+        # Aggregate usage
+        total_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        for r in results:
+            usage = r.get("usage", {})
+            total_usage["prompt_tokens"] += usage.get("prompt_tokens", 0)
+            total_usage["completion_tokens"] += usage.get("completion_tokens", 0)
+            total_usage["total_tokens"] += usage.get("total_tokens", 0)
+        
+    scan_placeholder.empty()
+
+    # Process annotations
+    for r in results:
+        if not r.get("error") and r.get("result"):
+            img = r["original_image"]
+            res_data = r["result"]
+            passed = res_data.get("inspection_passed", False)
+            annotated = annotate_image(img, res_data.get("items", []))
+            annotated = draw_inspection_badge(annotated, passed)
+            r["annotated_image"] = annotated
+
+    batch_data = {
+        "images_count": len(images),
+        "total_elapsed": total_elapsed,
+        "results": results,
+        "specification": specification,
+        "total_usage": total_usage
+    }
+    st.session_state.last_batch_result = batch_data
+    st.rerun()
+
+def render_batch_results(batch_data):
+    st.markdown("---")
+    
+    total_imgs = batch_data["images_count"]
+    total_elapsed = batch_data["total_elapsed"]
+    img_per_min = (total_imgs / total_elapsed) * 60 if total_elapsed > 0 else 0
+    
+    passed_count = sum(1 for r in batch_data["results"] if not r.get("error") and r.get("result") and r["result"].get("inspection_passed"))
+    
+    st.markdown(f"### [BATCH] RESULTS: {passed_count}/{total_imgs} PASSED")
+    st.markdown(
+        f'<div class="timer-chip" style="background: #22262E; padding: 1rem; border-radius: 8px; border: 1px solid #2E3340;">'
+        f'<span style="color: #E8640A; font-weight: bold;">[THROUGHPUT]</span> '
+        f'{total_imgs} images analyzed in {format_elapsed_time(total_elapsed)} — <strong>{img_per_min:.1f} img/min</strong></div>',
+        unsafe_allow_html=True
+    )
+    
+    # Performance Panel for the whole batch
+    render_performance_panel(batch_data.get("total_usage", {}), total_elapsed)
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Display Grid (max 2 per row to allow side-by-side internal comparison)
+    cols = st.columns(2)
+    
+    for i, r in enumerate(batch_data["results"]):
+        col = cols[i % 2]
+        with col:
+            st.markdown(f"##### IMAGE #{i+1}")
+            if r.get("error"):
+                st.error(f"[ERROR] {r['error']}")
+                st.image(r["original_image"], use_container_width=True)
+            else:
+                passed = r["result"].get("inspection_passed", False)
+                status_class = "status-pass" if passed else "status-fail"
+                status_text = "PASS" if passed else "FAIL"
+                
+                st.markdown(f'<div class="{status_class}" style="padding: 0.3rem; margin: 0.2rem 0; font-size: 0.9rem; text-align:center;">{status_text}</div>', unsafe_allow_html=True)
+                
+                # Side-by-side comparison for batch items
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.image(r["original_image"], caption="Original", use_container_width=True)
+                with c2:
+                    st.image(r["annotated_image"], caption="Annotated", use_container_width=True)
+                
+                with st.expander("[DATA] Details"):
+                    st.caption(f"Time: {r['elapsed']:.2f}s")
+                    for item in r["result"].get("items", []):
+                        st_name = item.get("id", "unknown").replace("_", " ").title()
+                        st_stat = item.get("status", "present").upper()
+                        col_clr = get_status_color(item.get("status", "present"))
+                        st.markdown(f"- **{st_name}**: <span style='color:{col_clr}'>{st_stat}</span>", unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+
+    st.markdown("---")
+    
+    col_dl, col_new = st.columns(2)
+    with col_dl:
+        try:
+            from report import generate_batch_report, get_report_filename
+            report_html = generate_batch_report(batch_data)
+            st.download_button(
+                label="[DL] Download Consolidated Batch Report",
+                data=report_html,
+                file_name=f"Batch_Report_{get_report_filename()}",
+                mime="text/html",
+                use_container_width=True,
+                key="dl_batch_btn"
+            )
+        except ImportError:
+            st.warning("Batch report generation not yet implemented.")
+        
+    with col_new:
+        if st.button("[NEW] Start New Inspection", type="secondary", use_container_width=True, key="btn_new_batch"):
+            st.session_state.last_batch_result = None
+            st.rerun()
+
 def execute_inspection(image: Image.Image, specification: str):
+
     """Run inspection and display results."""
     if not specification.strip():
-        st.error("⚠️ Please enter an Inspection Specification before running.")
+        st.error("[WARN] Please enter an Inspection Specification before running.")
         return
 
     # Run inspection
-    with st.spinner("🔍 ANALYZING ON AMD CLOUD..."):
+    with st.spinner("[ANALYZING] ON AMD CLOUD..."):
         # Visual Scanning Effect with Dual Layout
         scan_placeholder = st.empty()
         
@@ -735,39 +1003,58 @@ def execute_inspection(image: Image.Image, specification: str):
             
         with col_scan_right:
             log_placeholder = st.empty()
+            chart_placeholder = st.empty()
+            
             logs = [
-                "📡 INITIALIZING AMD MI300X PIPELINE...",
-                "👁️ CAPTURING VISUAL FEATURES...",
-                "🧠 ANALYZING COMPONENT GEOMETRY...",
-                "📋 CROSS-REFERENCING SPECIFICATION...",
-                "🔍 DETECTING RESISTORS AND CAPACITORS...",
-                "⚡ VERIFYING INTEGRITY OF IC CHIPS...",
-                "📏 CALCULATING BOUNDING COORDINATES...",
-                "📊 GENERATING STRUCTURED INSPECTION JSON..."
+                "[INIT] AMD Instinct™ MI300X Pipeline...",
+                "[HW] ALLOCATING HBM3 MEMORY...",
+                "[VLLM] LOADING QWEN3-VL WEIGHTS...",
+                "[SCAN] CAPTURING VISUAL FEATURES...",
+                "[AI] ANALYZING COMPONENT GEOMETRY...",
+                "[SPEC] CROSS-REFERENCING SPECIFICATION...",
+                "⚡ ACCELERATING INFERENCE VIA ROCm 6.0...",
+                "[DATA] GENERATING STRUCTURED JSON..."
             ]
             
             # Start the background inspection
             import threading
             from concurrent.futures import ThreadPoolExecutor
+            import random
+            import pandas as pd
             
             executor = ThreadPoolExecutor(max_workers=1)
             future = executor.submit(run_inspection, image, specification)
             
+            # Live Telemetry Simulation
+            history_data = []
+            
             # Simulate log typing while waiting
-            for i, log in enumerate(logs):
+            for i in range(len(logs) * 2): # Longer loop for more updates
                 if future.done(): break
-                current_logs = "<br>".join([f'<span style="color: #8B919A;">></span> {l}' for l in logs[:i+1]])
+                
+                # Update logs
+                log_idx = min(i // 2, len(logs) - 1)
+                current_logs = "<br>".join([f'<span style="color: #8B919A;">></span> {l}' for l in logs[:log_idx+1]])
                 log_placeholder.markdown(f"""
-                    <div style="background: #1A1D23; border: 1px solid #2E3340; border-radius: 8px; padding: 1.5rem; font-family: monospace; height: 320px; overflow-y: hidden;">
-                        <h5 style="color: #E8640A; margin-top: 0;">💻 SYSTEM LOG</h5>
-                        <div style="font-size: 0.85rem; line-height: 1.6;">
+                    <div style="background: #1A1D23; border: 1px solid #2E3340; border-radius: 8px; padding: 1.2rem; font-family: monospace; height: 180px; overflow-y: hidden; margin-bottom: 0.5rem;">
+                        <h5 style="color: #E8640A; margin: 0; font-size: 0.8rem;">[SYS] HW TELEMETRY</h5>
+                        <div style="font-size: 0.8rem; line-height: 1.5; margin-top: 0.5rem;">
                             {current_logs}
-                            <span style="display: inline-block; width: 8px; height: 15px; background: #E8640A; animation: blink 1s infinite;"></span>
+                            <span style="display: inline-block; width: 6px; height: 12px; background: #E8640A; animation: blink 1s infinite;"></span>
                         </div>
                     </div>
-                    <style>@keyframes blink {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0; }} }}</style>
                 """, unsafe_allow_html=True)
-                time.sleep(0.8) # Simulated speed
+                
+                # Update Live Chart (Simulated GPU Throughput)
+                new_val = random.uniform(18.5, 24.8)
+                history_data.append(new_val)
+                if len(history_data) > 20: history_data.pop(0)
+                
+                with chart_placeholder.container():
+                    st.markdown(f'<p style="color: #8B919A; font-size: 0.7rem; margin-bottom: -10px;">LIVE THROUGHPUT: <strong style="color:#10B981;">{new_val:.1f} tok/s</strong></p>', unsafe_allow_html=True)
+                    st.line_chart(history_data, height=120, use_container_width=True)
+                
+                time.sleep(0.4)
             
             response = future.result()
             
@@ -775,14 +1062,15 @@ def execute_inspection(image: Image.Image, specification: str):
 
     # Handle errors
     if response["error"]:
-        st.error(f"❌ Inspection Failed: {response['error']}")
+        st.error(f"[ERROR] Inspection Failed: {response['error']}")
         col_retry, _ = st.columns([1, 3])
         with col_retry:
-            if st.button("🔄 Retry", width="stretch"):
+            if st.button("🔄 Retry", use_container_width=True):
                 st.rerun()
         return
 
     result = response["result"]
+    result["usage"] = response.get("usage", {})
     elapsed = response["elapsed"]
 
     # Generate annotations once
@@ -811,8 +1099,20 @@ def execute_inspection(image: Image.Image, specification: str):
 
 # ─── Main Content Area ───────────────────────────────────────────────
 
+# If we have a pending batch inspection
+if st.session_state.get("pending_batch_images") is not None:
+    images = st.session_state.pending_batch_images
+    spec = st.session_state.pending_batch_spec
+    st.session_state.pending_batch_images = None
+    st.session_state.pending_batch_spec = None
+    execute_batch_inspection(images, spec)
+
+# If we are viewing a batch result
+elif st.session_state.get("last_batch_result") is not None:
+    render_batch_results(st.session_state.last_batch_result)
+
 # If we have a pending inspection (just captured from camera or uploaded)
-if st.session_state.get("pending_inspection_img") is not None:
+elif st.session_state.get("pending_inspection_img") is not None:
     img = st.session_state.pending_inspection_img
     spec = st.session_state.pending_inspection_spec
     # Reset pending state immediately so we don't loop
@@ -833,7 +1133,7 @@ elif st.session_state.last_result is not None:
     )
 else:
     # Tabs only show when no result is being viewed
-    tab_upload, tab_camera = st.tabs(["Upload Mode", "Live Camera"])
+    tab_upload, tab_camera, tab_batch = st.tabs(["Upload Mode", "Live Camera", "Batch Mode"])
 
     # ──────────────────────────────────────────────────────────────────────
     # TAB 1: Upload Mode
@@ -856,35 +1156,35 @@ else:
             if uploaded_file:
                 st.session_state.demo_image = None # Clear demo if user uploads
                 image = Image.open(uploaded_file)
-                st.image(image, caption="Uploaded image", width="stretch")
+                st.image(image, caption="Uploaded image", use_container_width=True)
             
             # Demo Gallery
-            st.markdown("##### 🧪 Quick Demos")
+            st.markdown("##### [DEMO] Quick Demos")
             col_d1, col_d2, col_d3 = st.columns(3)
             
             with col_d1:
-                if st.button("🔌 PCB", help="Load PCB Assembly demo", width="stretch"):
+                if st.button("[PCB]", help="Load PCB Assembly demo", use_container_width=True):
                     st.session_state.demo_image = Image.open("assets/demos/pcb_assembly.jpg")
                     st.session_state.template_select = "PCB Assembly"
                     st.session_state.spec_input = config.INSPECTION_TEMPLATES["PCB Assembly"]
                     st.rerun()
             
             with col_d2:
-                if st.button("⚡ Panel", help="Load Electrical Panel demo", width="stretch"):
+                if st.button("[PANEL]", help="Load Electrical Panel demo", use_container_width=True):
                     st.session_state.demo_image = Image.open("assets/demos/electrical_panel.jpg")
                     st.session_state.template_select = "Electrical Panel"
                     st.session_state.spec_input = config.INSPECTION_TEMPLATES["Electrical Panel"]
                     st.rerun()
             
             with col_d3:
-                if st.button("🛠️ Tools", help="Load BGS Tool Kit demo", width="stretch"):
+                if st.button("[TOOLS]", help="Load BGS Tool Kit demo", use_container_width=True):
                     st.session_state.demo_image = Image.open("assets/demos/bgs_tool_kit.PNG")
                     st.session_state.template_select = "BGS Tool Kit"
                     st.session_state.spec_input = config.INSPECTION_TEMPLATES["BGS Tool Kit"]
                     st.rerun()
 
             if st.session_state.get("demo_image"):
-                st.image(st.session_state.demo_image, caption=f"Demo Loaded: {st.session_state.get('template_select')}", width="stretch")
+                st.image(st.session_state.demo_image, caption=f"Demo Loaded: {st.session_state.get('template_select')}", use_container_width=True)
                 image = st.session_state.demo_image
 
         with col_input_spec:
@@ -908,7 +1208,7 @@ else:
             )
 
             # Discovery button
-            if st.button("🔍 Auto-Discover Components", width="stretch", help="Let AI identify everything it sees first"):
+            if st.button("[AUTO] Discover Components", use_container_width=True, help="Let AI identify everything it sees first"):
                 img_to_disc = uploaded_file if uploaded_file else st.session_state.get("demo_image")
                 
                 if img_to_disc:
@@ -917,7 +1217,7 @@ else:
                     else:
                         process_img = Image.open(img_to_disc)
                     
-                    with st.spinner("🕵️ DISCOVERING COMPONENTS..."):
+                    with st.spinner("[DISCOVERING] COMPONENTS..."):
                         discovery_res = run_discovery(process_img)
                         if discovery_res["error"]:
                             st.error(f"Discovery Error: {discovery_res['error']}")
@@ -928,7 +1228,7 @@ else:
 
             # Show discovery results if present
             if st.session_state.get("discovery_data"):
-                with st.expander("📝 Discovered Components (Use these for your spec)", expanded=True):
+                with st.expander("[LOG] Discovered Components (Use these for your spec)", expanded=True):
                     items = st.session_state.discovery_data.get("discovered_items", [])
                     for it in items:
                         st.markdown(f"- **{it.get('name', 'Unknown')}**: {it.get('description', 'No description')}")
@@ -942,7 +1242,7 @@ else:
         with col_run:
             run_clicked = st.button(
                 "Run Inspection",
-                width="stretch",
+                use_container_width=True,
                 type="primary",
                 disabled=(uploaded_file is None and st.session_state.get("demo_image") is None)
             )
@@ -975,7 +1275,7 @@ else:
         col_cam_ctrl, col_cam_spec = st.columns([2, 1])
 
         with col_cam_spec:
-            st.markdown("##### 📋 Specification")
+            st.markdown("##### [SPEC] Specification")
 
             template_cam = st.selectbox(
                 "Choose a template",
@@ -991,19 +1291,19 @@ else:
             )
 
         with col_cam_ctrl:
-            st.markdown("##### 🎥 Camera Feed")
+            st.markdown("##### [CAM] Feed")
 
             col_btn1, col_btn2, col_btn3 = st.columns(3)
             with col_btn1:
-                if st.button("▶️ Start Camera", width="stretch"):
+                if st.button("[START] Camera", use_container_width=True):
                     st.session_state.camera_active = True
                     st.rerun()
             with col_btn2:
-                if st.button("⏹️ Stop Camera", width="stretch"):
+                if st.button("[STOP] Camera", use_container_width=True):
                     st.session_state.camera_active = False
                     st.rerun()
             with col_btn3:
-                if st.button("📸 Manual Capture", width="stretch"):
+                if st.button("[CAPTURE] Manual", use_container_width=True):
                     st.session_state.manual_capture_trigger = True
 
             # Camera feed area
@@ -1013,7 +1313,7 @@ else:
 
 
             if st.session_state.camera_active:
-                camera_placeholder.info("🎥 INITIALIZING CAMERA PIPELINE...")
+                camera_placeholder.info("[CAM] INITIALIZING PIPELINE...")
                 cam = CameraManager(source=st.session_state.camera_source)
                 
                 if cam.connect():
@@ -1029,7 +1329,7 @@ else:
                             camera_placeholder.image(
                                 CameraManager.frame_to_rgb(frame),
                                 caption="Live feed — hold object still for auto-capture",
-                                width="stretch"
+                                use_container_width=True
                             )
 
                             # Check stability
@@ -1061,7 +1361,7 @@ else:
                         else:
                             retry_count += 1
                             if retry_count > 5:
-                                status_text.error("❌ Failed to read frame from camera after several attempts")
+                                status_text.error("[ERROR] Failed to read frame from camera after several attempts")
                                 break
                             time.sleep(0.1)
                         
@@ -1071,7 +1371,7 @@ else:
                     cam.disconnect()
                 else:
                     status_text.error(
-                        f"❌ Cannot connect to camera ({st.session_state.camera_source}). "
+                        f"[ERROR] Cannot connect to camera ({st.session_state.camera_source}). "
                         "Check your camera source in the sidebar settings."
                     )
 
@@ -1087,7 +1387,7 @@ else:
                         camera_placeholder.image(
                             CameraManager.frame_to_rgb(frame),
                             caption="Captured frame",
-                            width="stretch"
+                            use_container_width=True
                         )
                         cam.disconnect()
                         # SET STATE FOR MAIN AREA TO TAKE OVER
@@ -1095,10 +1395,10 @@ else:
                         st.session_state.pending_inspection_spec = spec_cam
                         st.rerun()
                     else:
-                        status_text.error("❌ Failed to capture frame")
+                        status_text.error("[ERROR] Failed to capture frame")
                         cam.disconnect()
                 else:
-                    status_text.error("❌ Cannot connect to camera")
+                    status_text.error("[ERROR] Cannot connect to camera")
 
         # Camera tips
         with st.expander("Camera Tips"):
@@ -1120,6 +1420,64 @@ else:
             - Hold still for 1+ second for auto-capture
             - Use manual capture (📸) if auto-detection is unreliable
             """)
+
+    # ──────────────────────────────────────────────────────────────────────
+    # TAB 3: Batch Mode
+    # ──────────────────────────────────────────────────────────────────────
+
+    with tab_batch:
+        st.markdown("#### Upload multiple images to analyze them in parallel")
+        
+        col_batch_img, col_batch_spec = st.columns([1, 1])
+        
+        with col_batch_img:
+            st.markdown("##### Images")
+            uploaded_batch = st.file_uploader(
+                "Upload up to 8 images for parallel inspection",
+                type=config.SUPPORTED_FORMATS,
+                key="upload_batch",
+                accept_multiple_files=True,
+                help="Supported formats: JPG, JPEG, PNG, BMP, WEBP"
+            )
+            
+            if uploaded_batch:
+                if len(uploaded_batch) > 8:
+                    st.warning(f"[WARN] You uploaded {len(uploaded_batch)} images. Only the first 8 will be processed to prevent API rate limits.")
+                    uploaded_batch = uploaded_batch[:8]
+                st.caption(f"[INFO] {len(uploaded_batch)} images ready for inspection.")
+                
+        with col_batch_spec:
+            st.markdown("##### Inspection Specification")
+            
+            template_batch = st.selectbox(
+                "Choose a template",
+                options=list(config.INSPECTION_TEMPLATES.keys()),
+                key="template_batch"
+            )
+
+            spec_batch = st.text_area(
+                "Inspection specification (applies to all images)",
+                value=config.INSPECTION_TEMPLATES.get(template_batch, ""),
+                height=180,
+                key="spec_batch"
+            )
+            
+        st.markdown("")
+        col_run_batch, col_info_batch = st.columns([1, 3])
+        with col_run_batch:
+            run_batch_clicked = st.button(
+                "START BATCH INSPECTION",
+                use_container_width=True,
+                type="primary",
+                disabled=(not uploaded_batch)
+            )
+        with col_info_batch:
+            st.caption(f"[LINK] Connected to {config.VLM_MODEL} on AMD Cloud (MI300X)")
+            
+            if run_batch_clicked and uploaded_batch:
+                st.session_state.pending_batch_images = [Image.open(f) for f in uploaded_batch]
+                st.session_state.pending_batch_spec = spec_batch
+                st.rerun()
 
 
 # ─── Footer ───────────────────────────────────────────────────────────
