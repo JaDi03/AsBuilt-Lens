@@ -580,7 +580,7 @@ with st.sidebar:
                 """, unsafe_allow_html=True)
                 
                 # Hidden key to make button unique
-                if st.button(f"[VIEW] Report #{len(st.session_state.history) - i}", key=f"view_{len(st.session_state.history) - i}", use_container_width=True):
+                if st.button(f"[VIEW] Report #{len(st.session_state.history) - i}", key=f"view_{len(st.session_state.history) - i}", width="stretch"):
                     st.session_state.last_result = entry["result"]
                     st.session_state.current_image = entry["original_image"]
                     st.session_state.current_annotated = entry["annotated_image"]
@@ -588,7 +588,7 @@ with st.sidebar:
                     st.session_state.viewing_history = True
                     st.rerun()
 
-        if st.button("[CLEAR] History", use_container_width=True):
+        if st.button("[CLEAR] History", width="stretch"):
             st.session_state.history = []
             st.rerun()
 
@@ -689,10 +689,10 @@ def render_inspection_results(result, image, annotated, specification, elapsed):
     col_orig, col_anno = st.columns(2)
     with col_orig:
         st.markdown("##### [IMG] ORIGINAL")
-        st.image(image, use_container_width=True)
+        st.image(image, width="stretch")
     with col_anno:
         st.markdown("##### [IMG] ANNOTATED")
-        st.image(annotated, use_container_width=True)
+        st.image(annotated, width="stretch")
 
     st.markdown("---")
     st.markdown("##### [DATA] Item Details")
@@ -757,26 +757,14 @@ def render_inspection_results(result, image, annotated, specification, elapsed):
     )
     report_filename = get_report_filename()
 
-    col_view, col_dl = st.columns(2)
-    
-    with col_view:
-        with st.expander("[VIEW] Full Report Online"):
-            import streamlit.components.v1 as components
-            components.html(report_html, height=800, scrolling=True)
-            st.caption("💡 To save as PDF: Open the view above, right-click and select 'Print', then 'Save as PDF'.")
-
-    with col_dl:
-        st.download_button(
-            label="[DL] Download ISO-9001 Report (HTML)",
-            data=report_html,
-            file_name=report_filename,
-            mime="text/html",
-            use_container_width=True,
-        )
+    with st.expander("[VIEW] Full Report Online", expanded=True):
+        import streamlit.components.v1 as components
+        components.html(report_html, height=1400, scrolling=True)
+        st.caption("💡 To save as PDF: Click the floating 'Download PDF' button inside the report above.")
     
     # Start New Inspection
     st.markdown("---")
-    if st.button("[NEW] Start Inspection", type="secondary", use_container_width=True):
+    if st.button("[NEW] Start Inspection", type="secondary", width="stretch"):
         st.session_state.last_result = None
         st.session_state.current_image = None
         st.session_state.current_annotated = None
@@ -884,7 +872,7 @@ def execute_batch_inspection(images: list, specification: str):
                 # Update Live Chart
                 with chart_placeholder.container():
                     st.markdown(f'<p style="color: #8B919A; font-size: 0.7rem; margin-bottom: -10px;">VLM THROUGHPUT: <strong style="color:#10B981;">{img_per_min:.1f} img/min</strong></p>', unsafe_allow_html=True)
-                    st.line_chart(throughput_history, height=120, use_container_width=True)
+                    st.line_chart(throughput_history, height=120, width="stretch")
                 
         # Re-order
         for i in range(len(images)):
@@ -952,7 +940,7 @@ def render_batch_results(batch_data):
             st.markdown(f"##### IMAGE #{i+1}")
             if r.get("error"):
                 st.error(f"[ERROR] {r['error']}")
-                st.image(r["original_image"], use_container_width=True)
+                st.image(r["original_image"], width="stretch")
             else:
                 passed = r["result"].get("inspection_passed", False)
                 status_class = "status-pass" if passed else "status-fail"
@@ -963,9 +951,9 @@ def render_batch_results(batch_data):
                 # Side-by-side comparison for batch items
                 c1, c2 = st.columns(2)
                 with c1:
-                    st.image(r["original_image"], use_container_width=True)
+                    st.image(r["original_image"], width="stretch")
                 with c2:
-                    st.image(r["annotated_image"], use_container_width=True)
+                    st.image(r["annotated_image"], width="stretch")
                 
                 with st.expander("[DATA] Details"):
                     st.caption(f"Time: {r['elapsed']:.2f}s")
@@ -978,24 +966,17 @@ def render_batch_results(batch_data):
 
     st.markdown("---")
     
-    col_dl, col_new = st.columns(2)
-    with col_dl:
-        try:
-            from report import generate_batch_report, get_report_filename
-            report_html = generate_batch_report(batch_data)
-            st.download_button(
-                label="[DL] Download Consolidated Batch Report",
-                data=report_html,
-                file_name=f"Batch_Report_{get_report_filename()}",
-                mime="text/html",
-                use_container_width=True,
-                key="dl_batch_btn"
-            )
-        except ImportError:
-            st.warning("Batch report generation not yet implemented.")
+    try:
+        from report import generate_batch_report, get_report_filename
+        report_html = generate_batch_report(batch_data)
+        with st.expander("[VIEW] Consolidated Batch Report", expanded=True):
+            import streamlit.components.v1 as components
+            components.html(report_html, height=1400, scrolling=True)
+            st.caption("💡 To save as PDF: Click the floating 'Download PDF' button inside the report above.")
+    except ImportError:
+        st.warning("Batch report generation not yet implemented.")
         
-    with col_new:
-        if st.button("[NEW] Start New Inspection", type="secondary", use_container_width=True, key="btn_new_batch"):
+    if st.button("[NEW] Start New Inspection", type="secondary", width="stretch", key="btn_new_batch"):
             st.session_state.last_batch_result = None
             st.rerun()
 
@@ -1084,7 +1065,7 @@ def execute_inspection(image: Image.Image, specification: str):
                 
                 with chart_placeholder.container():
                     st.markdown(f'<p style="color: #8B919A; font-size: 0.7rem; margin-bottom: -10px;">LIVE THROUGHPUT: <strong style="color:#10B981;">{new_val:.1f} tok/s</strong></p>', unsafe_allow_html=True)
-                    st.line_chart(history_data, height=120, use_container_width=True)
+                    st.line_chart(history_data, height=120, width="stretch")
                 
                 time.sleep(0.4)
             
@@ -1097,7 +1078,7 @@ def execute_inspection(image: Image.Image, specification: str):
         st.error(f"[ERROR] Inspection Failed: {response['error']}")
         col_retry, _ = st.columns([1, 3])
         with col_retry:
-            if st.button("🔄 Retry", use_container_width=True):
+            if st.button("🔄 Retry", width="stretch"):
                 st.rerun()
         return
 
@@ -1206,28 +1187,28 @@ else:
             if uploaded_file:
                 st.session_state.demo_image = None # Clear demo if user uploads
                 image = Image.open(uploaded_file)
-                st.image(image, caption="Uploaded image", use_container_width=True)
+                st.image(image, caption="Uploaded image", width="stretch")
             
             # Demo Gallery
             st.markdown("##### QUICK DEMOS")
             col_d1, col_d2, col_d3 = st.columns(3)
             
             with col_d1:
-                if st.button("[PCB]", use_container_width=True):
+                if st.button("[PCB]", width="stretch"):
                     st.session_state.demo_image = Image.open("assets/demos/pcb_assembly.jpg")
                     st.session_state.template_select = "PCB Assembly"
                     st.session_state.spec_input = config.INSPECTION_TEMPLATES["PCB Assembly"]
                     st.rerun()
             
             with col_d2:
-                if st.button("[PANEL]", use_container_width=True):
+                if st.button("[PANEL]", width="stretch"):
                     st.session_state.demo_image = Image.open("assets/demos/electrical_panel.jpg")
                     st.session_state.template_select = "Electrical Panel"
                     st.session_state.spec_input = config.INSPECTION_TEMPLATES["Electrical Panel"]
                     st.rerun()
             
             with col_d3:
-                if st.button("[TOOLS]", use_container_width=True):
+                if st.button("[TOOLS]", width="stretch"):
                     st.session_state.demo_image = Image.open("assets/demos/bgs_tool_kit.PNG")
                     st.session_state.template_select = "BGS Tool Kit"
                     st.session_state.spec_input = config.INSPECTION_TEMPLATES["BGS Tool Kit"]
@@ -1238,11 +1219,11 @@ else:
                 with col_demo_head:
                     st.caption(f"Demo Loaded: {st.session_state.get('template_select')}")
                 with col_demo_clear:
-                    if st.button("✖️ CLEAR", key="clear_demo", use_container_width=True):
+                    if st.button("✖️ CLEAR", key="clear_demo", width="stretch"):
                         st.session_state.demo_image = None
                         st.rerun()
                 
-                st.image(st.session_state.demo_image, use_container_width=True)
+                st.image(st.session_state.demo_image, width="stretch")
                 image = st.session_state.demo_image
 
         with col_input_spec:
@@ -1266,7 +1247,7 @@ else:
             )
 
             # Discovery button
-            if st.button("[AUTO] Discover Components", use_container_width=True, help="Let AI identify everything it sees first"):
+            if st.button("[AUTO] Discover Components", width="stretch", help="Let AI identify everything it sees first"):
                 img_to_disc = uploaded_file if uploaded_file else st.session_state.get("demo_image")
                 
                 if img_to_disc:
@@ -1300,7 +1281,7 @@ else:
         with col_run:
             run_clicked = st.button(
                 "Run Inspection",
-                use_container_width=True,
+                width="stretch",
                 type="primary",
                 disabled=(uploaded_file is None and st.session_state.get("demo_image") is None)
             )
@@ -1357,15 +1338,15 @@ else:
 
             col_btn1, col_btn2, col_btn3 = st.columns(3)
             with col_btn1:
-                if st.button("[START] Camera", use_container_width=True):
+                if st.button("[START] Camera", width="stretch"):
                     st.session_state.camera_active = True
                     st.rerun()
             with col_btn2:
-                if st.button("[STOP] Camera", use_container_width=True):
+                if st.button("[STOP] Camera", width="stretch"):
                     st.session_state.camera_active = False
                     st.rerun()
             with col_btn3:
-                if st.button("[CAPTURE] Manual", use_container_width=True):
+                if st.button("[CAPTURE] Manual", width="stretch"):
                     st.session_state.manual_capture_trigger = True
 
             # Camera feed area
@@ -1391,7 +1372,7 @@ else:
                             camera_placeholder.image(
                                 CameraManager.frame_to_rgb(frame),
                                 caption="Live feed — hold object still for auto-capture",
-                                use_container_width=True
+                                width="stretch"
                             )
 
                             # Check stability
@@ -1449,7 +1430,7 @@ else:
                         camera_placeholder.image(
                             CameraManager.frame_to_rgb(frame),
                             caption="Captured frame",
-                            use_container_width=True
+                            width="stretch"
                         )
                         cam.disconnect()
                         # SET STATE FOR MAIN AREA TO TAKE OVER
@@ -1527,7 +1508,7 @@ else:
                 cols_preview = st.columns(4)
                 for idx, file in enumerate(uploaded_batch[:8]): 
                     with cols_preview[idx % 4]:
-                        st.image(file, use_container_width=True)
+                        st.image(file, width="stretch")
                 st.markdown("<br>", unsafe_allow_html=True)
 
             # 2. "Add More" Uploader Below
@@ -1566,7 +1547,7 @@ else:
         with col_run_batch:
             run_batch_clicked = st.button(
                 "START BATCH INSPECTION",
-                use_container_width=True,
+                width="stretch",
                 type="primary",
                 disabled=(not uploaded_batch)
             )
