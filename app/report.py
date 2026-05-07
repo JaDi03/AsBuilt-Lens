@@ -55,6 +55,8 @@ def generate_inspection_report(
     elapsed: float,
     original_image: Optional[Image.Image] = None,
     annotated_image: Optional[Image.Image] = None,
+    inspector_name: str = "Automated System",
+    job_id: str = "N/A",
 ) -> str:
     """
     Generate a self-contained HTML inspection report.
@@ -65,6 +67,8 @@ def generate_inspection_report(
         elapsed: Elapsed time in seconds.
         original_image: The original captured/uploaded image.
         annotated_image: The annotated image with bounding boxes and badge.
+        inspector_name: Name of the operator.
+        job_id: Lot or Job identifier.
     
     Returns:
         Complete HTML string ready for download.
@@ -99,11 +103,14 @@ def generate_inspection_report(
         secs = elapsed % 60
         elapsed_str = f"{mins}m {secs:.1f}s"
     
-    # Verdict styling
+    # Verdict styling & Disposition
     verdict_color = "#10B981" if passed else "#ED1C24"
     verdict_text = "PASSED" if passed else "FAILED"
     verdict_bg = "rgba(16, 185, 129, 0.15)" if passed else "rgba(237, 28, 36, 0.15)"
     verdict_border = "#10B981" if passed else "#ED1C24"
+    
+    disposition_text = "APPROVED FOR NEXT STAGE" if passed else "QUARANTINED / ROUTED TO REWORK"
+    disposition_color = "#10B981" if passed else "#ED1C24"
     
     # Encode images if provided
     original_img_html = ""
@@ -146,6 +153,35 @@ def generate_inspection_report(
             </td>
             <td style="font-size:0.85rem; color:#8B919A;">{note if note else '—'}</td>
         </tr>
+        """
+        
+    # Build CAR (Corrective Action Request) section
+    car_html = ""
+    car_plan = result.get("corrective_action_plan", {})
+    if car_plan.get("status") == "REQUIRED":
+        car_rows = ""
+        for action in car_plan.get("actions", []):
+            issue = action.get("issue", "").upper()
+            part = action.get("part_number", "N/A")
+            sop = action.get("repair_sop", "N/A")
+            car_rows += f"""
+            <div style="background: #1A1D23; border-left: 3px solid #ED1C24; padding: 1rem; margin-bottom: 0.5rem; border-radius: 0 4px 4px 0;">
+                <div style="display:flex; justify-content:space-between; margin-bottom: 0.5rem;">
+                    <strong>Part: <span style="color:#FFFFFF;">{part}</span></strong>
+                    <span style="color:#ED1C24; font-size:0.8rem; font-weight:bold;">{issue}</span>
+                </div>
+                <div style="font-size:0.85rem; color:#8B919A;"><strong>Repair SOP:</strong> {sop}</div>
+            </div>
+            """
+            
+        car_html = f"""
+        <div class="section" style="border-color: rgba(237, 28, 36, 0.5);">
+            <h3 style="color: #ED1C24;">⚠️ Corrective Action Request (CAR)</h3>
+            <p style="font-size: 0.85rem; color: #8B919A; margin-bottom: 1rem;">
+                The autonomous agent has identified the following required actions based on the MES database:
+            </p>
+            {car_rows}
+        </div>
         """
     
     # Build the full HTML report
@@ -413,8 +449,20 @@ def generate_inspection_report(
             <h3>📋 Inspection Details</h3>
             <div class="meta-grid">
                 <div class="meta-item">
+                    <div class="label">Job / Lot Number</div>
+                    <div class="value">{job_id}</div>
+                </div>
+                <div class="meta-item">
+                    <div class="label">Inspector Name</div>
+                    <div class="value">{inspector_name}</div>
+                </div>
+                <div class="meta-item">
                     <div class="label">Date & Time</div>
                     <div class="value">{date_display}</div>
+                </div>
+                <div class="meta-item">
+                    <div class="label">Disposition Status</div>
+                    <div class="value" style="color: {disposition_color};">{disposition_text}</div>
                 </div>
                 <div class="meta-item">
                     <div class="label">Model</div>
@@ -476,6 +524,9 @@ def generate_inspection_report(
             <div class="summary-text">{summary}</div>
             {"<div class='summary-text' style='margin-top:0.75rem; border-left-color:#F59E0B;'><strong>Notes:</strong> " + notes + "</div>" if notes else ""}
         </div>
+        
+        <!-- Corrective Action Request (Dynamic) -->
+        {car_html}
         
         <!-- Footer -->
         <div class="footer">

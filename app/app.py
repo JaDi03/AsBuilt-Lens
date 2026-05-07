@@ -414,14 +414,27 @@ def init_session_state():
         "history": [],
         "inspection_running": False,
         "camera_source": "local",
+        "demo_image": None,
         "last_result": None,
         "camera_active": False,
         "manual_capture_trigger": False,
-        "demo_image": None,
+        "viewing_history": False,
+        "current_specification": "",
+        "current_image": None,
+        "current_annotated": None,
+        "spec_input": "", # Initialize for text area
+        "pending_inspection_img": None,
+        "pending_inspection_spec": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+
+
+def update_template():
+    """Callback to update text area when selectbox changes."""
+    template_name = st.session_state.template_select
+    st.session_state.spec_input = config.INSPECTION_TEMPLATES.get(template_name, "")
 
 
 init_session_state()
@@ -483,8 +496,21 @@ with st.sidebar:
 
     st.divider()
 
-    # ── Settings ──
-    st.markdown("#### Settings")
+    # ── Settings & Meta ──
+    st.markdown("#### Settings & Meta")
+
+    st.session_state.inspector_name = st.text_input(
+        "Inspector Name", 
+        value=st.session_state.get("inspector_name", "Automated System")
+    )
+    st.session_state.job_id = st.text_input(
+        "Job / Lot Number", 
+        value=st.session_state.get("job_id", "LOT-0000")
+    )
+    
+    st.divider()
+    
+    st.markdown("#### Camera Settings")
 
     st.session_state.camera_source = st.radio(
         "Camera Source",
@@ -508,14 +534,24 @@ with st.sidebar:
         for i, entry in enumerate(reversed(st.session_state.history)):
             status_class = "history-pass" if entry["passed"] else "history-fail"
             status_emoji = "✅" if entry["passed"] else "❌"
-            st.markdown(f"""
-            <div class="history-entry {status_class}">
-                <strong>{status_emoji} #{len(st.session_state.history) - i}</strong>
-                &nbsp;|&nbsp; {entry['passed_count']}/{entry['total_count']} items
-                &nbsp;|&nbsp; {format_elapsed_time(entry['elapsed'])}
-                <br><small style="color: #64748B;">{entry['timestamp']} — {entry['specification'][:50]}</small>
-            </div>
-            """, unsafe_allow_html=True)
+            with st.container():
+                st.markdown(f"""
+                <div class="history-entry {status_class}">
+                    <strong>{status_emoji} #{len(st.session_state.history) - i}</strong>
+                    &nbsp;|&nbsp; {entry['passed_count']}/{entry['total_count']} items
+                    &nbsp;|&nbsp; {format_elapsed_time(entry['elapsed'])}
+                    <br><small style="color: #64748B;">{entry['timestamp']} — {entry['specification_short']}</small>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Hidden key to make button unique
+                if st.button(f"👁️ View Report #{len(st.session_state.history) - i}", key=f"view_{len(st.session_state.history) - i}", width="stretch"):
+                    st.session_state.last_result = entry["result"]
+                    st.session_state.current_image = entry["original_image"]
+                    st.session_state.current_annotated = entry["annotated_image"]
+                    st.session_state.current_specification = entry["full_specification"]
+                    st.session_state.viewing_history = True
+                    st.rerun()
 
         if st.button("🗑️ Clear History", width="stretch"):
             st.session_state.history = []
@@ -536,6 +572,130 @@ with st.sidebar:
         "[GitHub](https://github.com) · "
         "[Hugging Face Space](https://huggingface.co)"
     )
+
+
+# ─── Result Rendering UI ──────────────────────────────────────────────
+
+def render_inspection_results(result, image, annotated, specification, elapsed):
+    """Reusable UI component to display inspection results."""
+    st.markdown("---")
+
+    # Timer
+    st.markdown(
+        f'<div class="timer-chip">⏱️ Inspection completed in {format_elapsed_time(elapsed)}</div>',
+        unsafe_allow_html=True
+    )
+
+    # Pass/Fail Badge
+    passed = result.get("inspection_passed", False)
+    passed_count, total_count = calculate_pass_rate(result.get("items", []))
+
+    if passed:
+        st.markdown(
+            f'<div class="status-pass">✅ INSPECTION PASSED — {passed_count}/{total_count} items verified</div>',
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown(
+            f'<div class="status-fail">❌ INSPECTION FAILED — {passed_count}/{total_count} items verified</div>',
+            unsafe_allow_html=True
+        )
+
+    # Annotated image + item details
+    col_img, col_details = st.columns([1, 1])
+
+    with col_img:
+        st.markdown("##### 🖼️ Annotated Image")
+        st.image(annotated, width="stretch")
+
+    with col_details:
+        st.markdown("##### 📊 Item Details")
+
+        for item in result.get("items", []):
+            status = item.get("status", "present")
+            icon = get_status_icon(status)
+            color = get_status_color(status)
+            name = item.get("id", "unknown").replace("_", " ").title()
+            expected = item.get("expected_count", 0)
+            detected = item.get("detected_count", 0)
+            confidence = item.get("confidence", 0)
+            note = item.get("note", "")
+
+            st.markdown(f"""
+            <div class="item-card">
+                <h4>{icon} {name}</h4>
+                <p>Expected: <strong>{expected}</strong> &nbsp;|&nbsp;
+                   Detected: <strong>{detected}</strong> &nbsp;|&nbsp;
+                   Status: <strong style="color: {color};">{status.upper()}</strong></p>
+                <div class="confidence-bar-container">
+                    <div class="confidence-bar-fill" style="width: {confidence}%; background: {color};"></div>
+                </div>
+                <p style="font-size: 0.8rem; margin-top: 0.25rem;">Confidence: {confidence}%</p>
+                {"<p style='font-size: 0.85rem; color: #F59E0B;'>📝 " + note + "</p>" if note else ""}
+            </div>
+            """, unsafe_allow_html=True)
+
+    # Summary
+    st.markdown("##### 📝 Summary")
+    st.info(result.get("summary", "No summary available."))
+
+    if result.get("notes"):
+        st.caption(f"📋 Notes: {result['notes']}")
+
+    # ── Agent Corrective Actions (CAR) ──
+    car_plan = result.get("corrective_action_plan", {})
+    if car_plan.get("status") == "REQUIRED":
+        st.markdown("##### ⚠️ Corrective Action Request (CAR)")
+        st.warning("The autonomous agent has identified required actions based on the MES database:")
+        for action in car_plan.get("actions", []):
+            st.markdown(f"""
+            <div style="background: rgba(237, 28, 36, 0.1); border-left: 3px solid #ED1C24; padding: 1rem; margin-bottom: 0.5rem; border-radius: 0 4px 4px 0;">
+                <div style="display:flex; justify-content:space-between; margin-bottom: 0.5rem;">
+                    <strong>Part: <span style="color:#FFFFFF;">{action.get('part_number')}</span></strong>
+                    <span style="color:#ED1C24; font-size:0.8rem; font-weight:bold;">{action.get('issue', '').upper()}</span>
+                </div>
+                <div style="font-size:0.85rem; color:#8B919A;"><strong>Repair SOP:</strong> {action.get('repair_sop')}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # ── Report Generation & Options ──
+    st.markdown("---")
+    report_html = generate_inspection_report(
+        result=result,
+        specification=specification,
+        elapsed=elapsed,
+        original_image=image,
+        annotated_image=annotated,
+        inspector_name=st.session_state.get("inspector_name", "Automated System"),
+        job_id=st.session_state.get("job_id", "N/A"),
+    )
+    report_filename = get_report_filename()
+
+    col_view, col_dl = st.columns(2)
+    
+    with col_view:
+        with st.expander("👁️ View Full Report Online"):
+            import streamlit.components.v1 as components
+            components.html(report_html, height=800, scrolling=True)
+            st.caption("💡 To save as PDF: Open the view above, right-click and select 'Print', then 'Save as PDF'.")
+
+    with col_dl:
+        st.download_button(
+            label="📄 Download ISO-9001 Report (HTML)",
+            data=report_html,
+            file_name=report_filename,
+            mime="text/html",
+            width="stretch",
+        )
+    
+    # Start New Inspection
+    st.markdown("---")
+    if st.button("🗑️ Start New Inspection", type="secondary", width="stretch"):
+        st.session_state.last_result = None
+        st.session_state.current_image = None
+        st.session_state.current_annotated = None
+        st.session_state.viewing_history = False
+        st.rerun()
 
 
 # ─── Inspection Function ──────────────────────────────────────────────
@@ -625,353 +785,341 @@ def execute_inspection(image: Image.Image, specification: str):
     result = response["result"]
     elapsed = response["elapsed"]
 
-    # ── Display Results ──
-    st.markdown("---")
-
-    # Timer
-    st.markdown(
-        f'<div class="timer-chip">⏱️ Inspection completed in {format_elapsed_time(elapsed)}</div>',
-        unsafe_allow_html=True
-    )
-
-    # Pass/Fail Badge
+    # Generate annotations once
     passed = result.get("inspection_passed", False)
-    passed_count, total_count = calculate_pass_rate(result.get("items", []))
-
-    if passed:
-        st.markdown(
-            f'<div class="status-pass">✅ INSPECTION PASSED — {passed_count}/{total_count} items verified</div>',
-            unsafe_allow_html=True
-        )
-    else:
-        st.markdown(
-            f'<div class="status-fail">❌ INSPECTION FAILED — {passed_count}/{total_count} items verified</div>',
-            unsafe_allow_html=True
-        )
-
-    # Annotated image + item details
-    col_img, col_details = st.columns([1, 1])
-
-    with col_img:
-        st.markdown("##### 🖼️ Annotated Image")
-        annotated = annotate_image(image, result.get("items", []))
-        annotated = draw_inspection_badge(annotated, passed)
-        st.image(annotated, use_container_width=True)
-
-    with col_details:
-        st.markdown("##### 📊 Item Details")
-
-        for item in result.get("items", []):
-            status = item.get("status", "present")
-            icon = get_status_icon(status)
-            color = get_status_color(status)
-            name = item.get("id", "unknown").replace("_", " ").title()
-            expected = item.get("expected_count", 0)
-            detected = item.get("detected_count", 0)
-            confidence = item.get("confidence", 0)
-            note = item.get("note", "")
-
-            st.markdown(f"""
-            <div class="item-card">
-                <h4>{icon} {name}</h4>
-                <p>Expected: <strong>{expected}</strong> &nbsp;|&nbsp;
-                   Detected: <strong>{detected}</strong> &nbsp;|&nbsp;
-                   Status: <strong style="color: {color};">{status.upper()}</strong></p>
-                <div class="confidence-bar-container">
-                    <div class="confidence-bar-fill" style="width: {confidence}%; background: {color};"></div>
-                </div>
-                <p style="font-size: 0.8rem; margin-top: 0.25rem;">Confidence: {confidence}%</p>
-                {"<p style='font-size: 0.85rem; color: #F59E0B;'>📝 " + note + "</p>" if note else ""}
-            </div>
-            """, unsafe_allow_html=True)
-
-    # Summary
-    st.markdown("##### 📝 Summary")
-    st.info(result.get("summary", "No summary available."))
-
-    if result.get("notes"):
-        st.caption(f"📋 Notes: {result['notes']}")
-
-    # ── Download Report ──
-    st.markdown("---")
-    report_html = generate_inspection_report(
-        result=result,
-        specification=specification,
-        elapsed=elapsed,
-        original_image=image,
-        annotated_image=annotated,
-    )
-    report_filename = get_report_filename()
-
-    col_dl, col_dl_info = st.columns([1, 3])
-    with col_dl:
-        st.download_button(
-            label="📄 Download Inspection Report",
-            data=report_html,
-            file_name=report_filename,
-            mime="text/html",
-            use_container_width=True,
-        )
-    with col_dl_info:
-        st.caption(
-            "Self-contained HTML report with full inspection results, "
-            "annotated images, and metadata. Open in any browser or print to PDF."
-        )
+    annotated = annotate_image(image, result.get("items", []))
+    annotated = draw_inspection_badge(annotated, passed)
 
     # Save to history
-    history_entry = create_history_entry(image, result, elapsed, specification)
+    history_entry = create_history_entry(image, annotated, result, elapsed, specification)
     st.session_state.history.append(history_entry)
+    
+    # Set current viewing state
     st.session_state.last_result = result
+    st.session_state.current_image = image
+    st.session_state.current_annotated = annotated
+    st.session_state.current_specification = specification
+    st.session_state.current_elapsed = elapsed
+    st.session_state.viewing_history = False
+    
+    # Trigger a rerun to show the results via the main content area logic
+    # This prevents the results from being rendered inside the tabs layout
+    st.rerun()
 
 
 # ─── Main Content: Tabs ───────────────────────────────────────────────
 
-tab_upload, tab_camera = st.tabs(["Upload Mode", "Live Camera"])
+# ─── Main Content Area ───────────────────────────────────────────────
 
-# ──────────────────────────────────────────────────────────────────────
-# TAB 1: Upload Mode
-# ──────────────────────────────────────────────────────────────────────
+# If we have a pending inspection (just captured from camera or uploaded)
+if st.session_state.get("pending_inspection_img") is not None:
+    img = st.session_state.pending_inspection_img
+    spec = st.session_state.pending_inspection_spec
+    # Reset pending state immediately so we don't loop
+    st.session_state.pending_inspection_img = None
+    st.session_state.pending_inspection_spec = None
+    # Now execute in the main area context
+    execute_inspection(img, spec)
 
-with tab_upload:
-    st.markdown("#### Upload an image and describe what it should contain")
+# If we are viewing a result (either from history or just finished)
+elif st.session_state.last_result is not None:
+    # Use the reusable renderer
+    render_inspection_results(
+        st.session_state.last_result,
+        st.session_state.current_image,
+        st.session_state.current_annotated,
+        st.session_state.current_specification,
+        st.session_state.get("current_elapsed", 0)
+    )
+else:
+    # Tabs only show when no result is being viewed
+    tab_upload, tab_camera = st.tabs(["Upload Mode", "Live Camera"])
 
-    col_input_img, col_input_spec = st.columns([1, 1])
+    # ──────────────────────────────────────────────────────────────────────
+    # TAB 1: Upload Mode
+    # ──────────────────────────────────────────────────────────────────────
 
-    with col_input_img:
-        st.markdown("##### Image")
-        uploaded_file = st.file_uploader(
-            "Upload an image of the object to inspect",
-            type=config.SUPPORTED_FORMATS,
-            key="upload_image",
-            help="Supported formats: JPG, JPEG, PNG, BMP, WEBP"
-        )
+    with tab_upload:
+        st.markdown("#### Upload an image and describe what it should contain")
 
-        if uploaded_file:
-            st.session_state.demo_image = None # Clear demo if user uploads
-            image = Image.open(uploaded_file)
-            st.image(image, caption="Uploaded image", use_container_width=True)
-        
-        # Demo button
-        if st.button("🖼️ Use Demo PCB Sample", width="stretch", help="Load a pre-configured sample image for testing"):
-            st.session_state.demo_image = Image.open("assets/demo_pcb.jpg")
-            st.session_state.template_select = "PCB Assembly"
-            st.rerun()
+        col_input_img, col_input_spec = st.columns([1, 1])
 
-        if st.session_state.get("demo_image"):
-            st.image(st.session_state.demo_image, caption="Demo PCB Sample Loaded", use_container_width=True)
-            image = st.session_state.demo_image
+        with col_input_img:
+            st.markdown("##### Image")
+            uploaded_file = st.file_uploader(
+                "Upload an image of the object to inspect",
+                type=config.SUPPORTED_FORMATS,
+                key="upload_image",
+                help="Supported formats: JPG, JPEG, PNG, BMP, WEBP"
+            )
 
-    with col_input_spec:
-        st.markdown("##### Inspection Specification")
-
-        # Template selector
-        template_name = st.selectbox(
-            "Choose a template or write custom",
-            options=list(config.INSPECTION_TEMPLATES.keys()),
-            key="template_select"
-        )
-
-        # Specification text area
-        default_spec = config.INSPECTION_TEMPLATES.get(template_name, "")
-        specification = st.text_area(
-            "Describe expected items in natural language",
-            value=default_spec,
-            height=200,
-            placeholder="Example:\nExpected items:\n- 4x resistor (blue body, through-hole)\n- 1x capacitor (cylindrical, blue)\n- 1x IC chip (black, rectangular)",
-            key="spec_input"
-        )
-
-        # Discovery button
-        if st.button("🔍 Auto-Discover Components", width="stretch", help="Let AI identify everything it sees first"):
-            img_to_disc = uploaded_file if uploaded_file else st.session_state.get("demo_image")
+            if uploaded_file:
+                st.session_state.demo_image = None # Clear demo if user uploads
+                image = Image.open(uploaded_file)
+                st.image(image, caption="Uploaded image", width="stretch")
             
-            if img_to_disc:
-                if isinstance(img_to_disc, Image.Image):
-                    process_img = img_to_disc
-                else:
-                    process_img = Image.open(img_to_disc)
-                
-                with st.spinner("🕵️ DISCOVERING COMPONENTS..."):
-                    discovery_res = run_discovery(process_img)
-                    if discovery_res["error"]:
-                        st.error(f"Discovery Error: {discovery_res['error']}")
-                    else:
-                        st.session_state.discovery_data = discovery_res["result"]
-            else:
-                st.warning("Please upload an image first.")
-
-        # Show discovery results if present
-        if st.session_state.get("discovery_data"):
-            with st.expander("📝 Discovered Components (Use these for your spec)", expanded=True):
-                items = st.session_state.discovery_data.get("discovered_items", [])
-                for it in items:
-                    st.markdown(f"- **{it.get('name', 'Unknown')}**: {it.get('description', 'No description')}")
-                if st.button("Clear Discovery"):
-                    st.session_state.discovery_data = None
+            # Demo Gallery
+            st.markdown("##### 🧪 Quick Demos")
+            col_d1, col_d2, col_d3 = st.columns(3)
+            
+            with col_d1:
+                if st.button("🔌 PCB", help="Load PCB Assembly demo", width="stretch"):
+                    st.session_state.demo_image = Image.open("assets/demos/pcb_assembly.jpg")
+                    st.session_state.template_select = "PCB Assembly"
+                    st.session_state.spec_input = config.INSPECTION_TEMPLATES["PCB Assembly"]
+                    st.rerun()
+            
+            with col_d2:
+                if st.button("⚡ Panel", help="Load Electrical Panel demo", width="stretch"):
+                    st.session_state.demo_image = Image.open("assets/demos/electrical_panel.jpg")
+                    st.session_state.template_select = "Electrical Panel"
+                    st.session_state.spec_input = config.INSPECTION_TEMPLATES["Electrical Panel"]
+                    st.rerun()
+            
+            with col_d3:
+                if st.button("🛠️ Tools", help="Load BGS Tool Kit demo", width="stretch"):
+                    st.session_state.demo_image = Image.open("assets/demos/bgs_tool_kit.PNG")
+                    st.session_state.template_select = "BGS Tool Kit"
+                    st.session_state.spec_input = config.INSPECTION_TEMPLATES["BGS Tool Kit"]
                     st.rerun()
 
-    # Run button
-    st.markdown("")
-    col_run, col_info = st.columns([1, 3])
-    with col_run:
-        run_clicked = st.button(
-            "Run Inspection",
-            width="stretch",
-            type="primary",
-            disabled=(uploaded_file is None and st.session_state.get("demo_image") is None)
-        )
-    with col_info:
-        st.caption(f"🔗 Connected to {config.VLM_MODEL} on AMD Cloud (MI300X)")
+            if st.session_state.get("demo_image"):
+                st.image(st.session_state.demo_image, caption=f"Demo Loaded: {st.session_state.get('template_select')}", width="stretch")
+                image = st.session_state.demo_image
 
-    if run_clicked:
-        active_image = None
-        if uploaded_file:
-            active_image = Image.open(uploaded_file)
-        elif st.session_state.get("demo_image"):
-            active_image = st.session_state.demo_image
-            
-        if active_image:
-            execute_inspection(active_image, specification)
-        else:
-            st.error("Please upload an image or use the demo sample.")
+        with col_input_spec:
+            st.markdown("##### Inspection Specification")
 
+            # Template selector
+            template_name = st.selectbox(
+                "Choose a template or write custom",
+                options=list(config.INSPECTION_TEMPLATES.keys()),
+                key="template_select",
+                on_change=update_template
+            )
 
-# ──────────────────────────────────────────────────────────────────────
-# TAB 2: Live Camera
-# ──────────────────────────────────────────────────────────────────────
+            # Specification text area
+            default_spec = config.INSPECTION_TEMPLATES.get(template_name, "")
+            specification = st.text_area(
+                "Describe expected items in natural language",
+                height=200,
+                placeholder="Example:\nExpected items:\n- 4x resistor (blue body, through-hole)\n- 1x capacitor (cylindrical, blue)\n- 1x IC chip (black, rectangular)",
+                key="spec_input"
+            )
 
-with tab_camera:
-    st.markdown("#### Live camera inspection with automatic stability detection")
-
-    col_cam_ctrl, col_cam_spec = st.columns([2, 1])
-
-    with col_cam_spec:
-        st.markdown("##### 📋 Specification")
-
-        template_cam = st.selectbox(
-            "Choose a template",
-            options=list(config.INSPECTION_TEMPLATES.keys()),
-            key="template_camera"
-        )
-
-        spec_cam = st.text_area(
-            "Inspection specification",
-            value=config.INSPECTION_TEMPLATES.get(template_cam, ""),
-            height=180,
-            key="spec_camera"
-        )
-
-    with col_cam_ctrl:
-        st.markdown("##### 🎥 Camera Feed")
-
-        col_btn1, col_btn2, col_btn3 = st.columns(3)
-        with col_btn1:
-            if st.button("▶️ Start Camera", width="stretch"):
-                st.session_state.camera_active = True
-                st.rerun()
-        with col_btn2:
-            if st.button("⏹️ Stop Camera", width="stretch"):
-                st.session_state.camera_active = False
-                st.rerun()
-        with col_btn3:
-            if st.button("📸 Manual Capture", width="stretch"):
-                st.session_state.manual_capture_trigger = True
-
-        # Camera feed area
-        camera_placeholder = st.empty()
-        stability_bar = st.empty()
-        status_text = st.empty()
-
-
-        if st.session_state.camera_active:
-            cam = CameraManager(source=st.session_state.camera_source)
-            if cam.connect():
-                status_text.success("Camera connected — place object and hold still")
+            # Discovery button
+            if st.button("🔍 Auto-Discover Components", width="stretch", help="Let AI identify everything it sees first"):
+                img_to_disc = uploaded_file if uploaded_file else st.session_state.get("demo_image")
                 
-                # Live Loop
-                while st.session_state.camera_active:
+                if img_to_disc:
+                    if isinstance(img_to_disc, Image.Image):
+                        process_img = img_to_disc
+                    else:
+                        process_img = Image.open(img_to_disc)
+                    
+                    with st.spinner("🕵️ DISCOVERING COMPONENTS..."):
+                        discovery_res = run_discovery(process_img)
+                        if discovery_res["error"]:
+                            st.error(f"Discovery Error: {discovery_res['error']}")
+                        else:
+                            st.session_state.discovery_data = discovery_res["result"]
+                else:
+                    st.warning("Please upload an image first.")
+
+            # Show discovery results if present
+            if st.session_state.get("discovery_data"):
+                with st.expander("📝 Discovered Components (Use these for your spec)", expanded=True):
+                    items = st.session_state.discovery_data.get("discovered_items", [])
+                    for it in items:
+                        st.markdown(f"- **{it.get('name', 'Unknown')}**: {it.get('description', 'No description')}")
+                    if st.button("Clear Discovery"):
+                        st.session_state.discovery_data = None
+                        st.rerun()
+
+        # Run button
+        st.markdown("")
+        col_run, col_info = st.columns([1, 3])
+        with col_run:
+            run_clicked = st.button(
+                "Run Inspection",
+                width="stretch",
+                type="primary",
+                disabled=(uploaded_file is None and st.session_state.get("demo_image") is None)
+            )
+        with col_info:
+            st.caption(f"🔗 Connected to {config.VLM_MODEL} on AMD Cloud (MI300X)")
+
+            if run_clicked:
+                active_image = None
+                if uploaded_file:
+                    active_image = Image.open(uploaded_file)
+                elif st.session_state.get("demo_image"):
+                    active_image = st.session_state.demo_image
+                    
+                if active_image:
+                    # SET STATE FOR MAIN AREA TO TAKE OVER
+                    st.session_state.pending_inspection_img = active_image
+                    st.session_state.pending_inspection_spec = specification
+                    st.rerun()
+                else:
+                    st.error("Please upload an image or use the demo sample.")
+
+
+    # ──────────────────────────────────────────────────────────────────────
+    # TAB 2: Live Camera
+    # ──────────────────────────────────────────────────────────────────────
+
+    with tab_camera:
+        st.markdown("#### Live camera inspection with automatic stability detection")
+
+        col_cam_ctrl, col_cam_spec = st.columns([2, 1])
+
+        with col_cam_spec:
+            st.markdown("##### 📋 Specification")
+
+            template_cam = st.selectbox(
+                "Choose a template",
+                options=list(config.INSPECTION_TEMPLATES.keys()),
+                key="template_camera"
+            )
+
+            spec_cam = st.text_area(
+                "Inspection specification",
+                value=config.INSPECTION_TEMPLATES.get(template_cam, ""),
+                height=180,
+                key="spec_camera"
+            )
+
+        with col_cam_ctrl:
+            st.markdown("##### 🎥 Camera Feed")
+
+            col_btn1, col_btn2, col_btn3 = st.columns(3)
+            with col_btn1:
+                if st.button("▶️ Start Camera", width="stretch"):
+                    st.session_state.camera_active = True
+                    st.rerun()
+            with col_btn2:
+                if st.button("⏹️ Stop Camera", width="stretch"):
+                    st.session_state.camera_active = False
+                    st.rerun()
+            with col_btn3:
+                if st.button("📸 Manual Capture", width="stretch"):
+                    st.session_state.manual_capture_trigger = True
+
+            # Camera feed area
+            camera_placeholder = st.empty()
+            stability_bar = st.empty()
+            status_text = st.empty()
+
+
+            if st.session_state.camera_active:
+                camera_placeholder.info("🎥 INITIALIZING CAMERA PIPELINE...")
+                cam = CameraManager(source=st.session_state.camera_source)
+                
+                if cam.connect():
+                    status_text.success("Camera connected — place object and hold still")
+                    
+                    # Live Loop
+                    retry_count = 0
+                    while st.session_state.camera_active:
+                        frame = cam.read_frame()
+                        if frame is not None:
+                            retry_count = 0 # Reset on success
+                            # Show current frame
+                            camera_placeholder.image(
+                                CameraManager.frame_to_rgb(frame),
+                                caption="Live feed — hold object still for auto-capture",
+                                width="stretch"
+                            )
+
+                            # Check stability
+                            is_stable, motion_score = cam.check_stability(frame)
+                            progress = cam.get_stability_progress()
+                            stability_bar.progress(
+                                int(progress),
+                                text=f"Stability: {progress:.0f}% | Motion: {motion_score:.4f}"
+                            )
+
+                            if is_stable or st.session_state.get("manual_capture_trigger"):
+                                st.session_state.manual_capture_trigger = False
+                                status_text.info("Capture triggered! Switching to analysis...")
+                                pil_image = CameraManager.frame_to_pil(frame)
+                                cam.disconnect()
+                                st.session_state.camera_active = False
+                                
+                                # SET STATE FOR MAIN AREA TO TAKE OVER
+                                st.session_state.pending_inspection_img = pil_image
+                                st.session_state.pending_inspection_spec = spec_cam
+
+                                # CLEAR UI BEFORE RERUN TO PREVENT MEDIA ERRORS
+                                camera_placeholder.empty()
+                                stability_bar.empty()
+                                status_text.empty()
+                                
+                                st.rerun()
+                                break
+                        else:
+                            retry_count += 1
+                            if retry_count > 5:
+                                status_text.error("❌ Failed to read frame from camera after several attempts")
+                                break
+                            time.sleep(0.1)
+                        
+                        # Small sleep to prevent high CPU usage
+                        time.sleep(0.01)
+                    
+                    cam.disconnect()
+                else:
+                    status_text.error(
+                        f"❌ Cannot connect to camera ({st.session_state.camera_source}). "
+                        "Check your camera source in the sidebar settings."
+                    )
+
+
+            elif st.session_state.get("manual_capture_trigger"):
+                st.session_state.manual_capture_trigger = False # Reset trigger
+
+                cam = CameraManager(source=st.session_state.camera_source)
+                if cam.connect():
                     frame = cam.read_frame()
                     if frame is not None:
-                        # Show current frame
+                        pil_image = CameraManager.frame_to_pil(frame)
                         camera_placeholder.image(
                             CameraManager.frame_to_rgb(frame),
-                            caption="Live feed — hold object still for auto-capture",
-                            use_container_width=True
+                            caption="Captured frame",
+                            width="stretch"
                         )
-
-                        # Check stability
-                        is_stable, motion_score = cam.check_stability(frame)
-                        progress = cam.get_stability_progress()
-                        stability_bar.progress(
-                            int(progress),
-                            text=f"Stability: {progress:.0f}% | Motion: {motion_score:.4f}"
-                        )
-
-                        if is_stable or st.session_state.get("manual_capture_trigger"):
-                            st.session_state.manual_capture_trigger = False
-                            status_text.info("Capture triggered! Analyzing...")
-                            pil_image = CameraManager.frame_to_pil(frame)
-                            cam.disconnect()
-                            st.session_state.camera_active = False
-                            execute_inspection(pil_image, spec_cam)
-                            st.rerun()
-                            break
+                        cam.disconnect()
+                        # SET STATE FOR MAIN AREA TO TAKE OVER
+                        st.session_state.pending_inspection_img = pil_image
+                        st.session_state.pending_inspection_spec = spec_cam
+                        st.rerun()
                     else:
-                        status_text.error("❌ Failed to read frame from camera")
-                        break
-                    
-                    # Small sleep to prevent high CPU usage
-                    time.sleep(0.01)
-                
-                cam.disconnect()
-            else:
-                status_text.error(
-                    f"❌ Cannot connect to camera ({st.session_state.camera_source}). "
-                    "Check your camera source in the sidebar settings."
-                )
-
-
-        elif st.session_state.get("manual_capture_trigger"):
-            st.session_state.manual_capture_trigger = False # Reset trigger
-
-            cam = CameraManager(source=st.session_state.camera_source)
-            if cam.connect():
-                frame = cam.read_frame()
-                if frame is not None:
-                    pil_image = CameraManager.frame_to_pil(frame)
-                    camera_placeholder.image(
-                        CameraManager.frame_to_rgb(frame),
-                        caption="Captured frame",
-                        use_container_width=True
-                    )
-                    cam.disconnect()
-                    execute_inspection(pil_image, spec_cam)
+                        status_text.error("❌ Failed to capture frame")
+                        cam.disconnect()
                 else:
-                    status_text.error("❌ Failed to capture frame")
-                    cam.disconnect()
-            else:
-                status_text.error("❌ Cannot connect to camera")
+                    status_text.error("❌ Cannot connect to camera")
 
-    # Camera tips
-    with st.expander("Camera Tips"):
-        st.markdown("""
-        **Using laptop webcam:**
-        - Select "Laptop Webcam" in sidebar settings
-        - Ensure adequate lighting (desk lamp recommended)
-        - Use a uniform background (white or black surface)
+        # Camera tips
+        with st.expander("Camera Tips"):
+            st.markdown("""
+            **Using laptop webcam:**
+            - Select "Laptop Webcam" in sidebar settings
+            - Ensure adequate lighting (desk lamp recommended)
+            - Use a uniform background (white or black surface)
 
-        **Using phone as IP camera:**
-        - Install [DroidCam](https://www.dev47apps.com/) or [IP Webcam](https://play.google.com/store/apps/details?id=com.pas.webcam)
-        - Connect phone to same WiFi network as your PC
-        - Set `CAMERA_URL` in `.env` to the phone's stream URL
-        - Select "Phone IP Camera" in sidebar settings
+            **Using phone as IP camera:**
+            - Install [DroidCam](https://www.dev47apps.com/) or [IP Webcam](https://play.google.com/store/apps/details?id=com.pas.webcam)
+            - Connect phone to same WiFi network as your PC
+            - Set `CAMERA_URL` in `.env` to the phone's stream URL
+            - Select "Phone IP Camera" in sidebar settings
 
-        **For best results:**
-        - Keep the object centered in frame
-        - Avoid shadows and reflections
-        - Hold still for 1+ second for auto-capture
-        - Use manual capture (📸) if auto-detection is unreliable
-        """)
+            **For best results:**
+            - Keep the object centered in frame
+            - Avoid shadows and reflections
+            - Hold still for 1+ second for auto-capture
+            - Use manual capture (📸) if auto-detection is unreliable
+            """)
 
 
 # ─── Footer ───────────────────────────────────────────────────────────

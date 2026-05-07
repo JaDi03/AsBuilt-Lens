@@ -221,6 +221,7 @@ def format_confidence_bar(confidence: int, width: int = 20) -> str:
 
 def create_history_entry(
     image: Image.Image,
+    annotated_image: Image.Image,
     result: Dict,
     elapsed: float,
     specification: str
@@ -237,11 +238,15 @@ def create_history_entry(
 
     return {
         "thumbnail": thumbnail,
+        "annotated_image": annotated_image,
+        "original_image": image,
+        "result": result,
         "passed": result.get("inspection_passed", False),
         "passed_count": passed,
         "total_count": total,
         "elapsed": elapsed,
         "summary": result.get("summary", ""),
-        "specification": specification[:100] + "..." if len(specification) > 100 else specification,
+        "full_specification": specification,
+        "specification_short": specification[:100] + "..." if len(specification) > 100 else specification,
         "timestamp": __import__("datetime").datetime.now().strftime("%H:%M:%S"),
     }

@@ -180,6 +180,70 @@ def validate_result(result: dict) -> dict:
         if item["status"] not in valid_statuses:
             item["status"] = "anomaly"
 
+    # LOGIC GUARD: Recalculate passed status if the VLM made a logical error
+    # If all items are 'present' and counts match, it MUST pass.
+    # If any item is missing or anomaly, it MUST fail.
+    all_ok = True
+    for item in result["items"]:
+        # If it's a specified item (expected_count > 0)
+        if item.get("expected_count", 0) > 0:
+            if item["status"] != "present" or item["detected_count"] != item["expected_count"]:
+                all_ok = False
+                break
+        # If it's unexpected, it depends on policy. For now, unexpected items don't cause failure 
+        # unless specifically requested, but missing/anomaly do.
+    
+    # Force the flag to be logically consistent
+    result["inspection_passed"] = all_ok
+
+    return result
+
+
+def agent_post_processing(result: dict) -> dict:
+    """
+    Agentic Logic: Consults the MES/ERP database for corrective actions.
+    If an item is missing or anomalous, retrieves the official part number and repair SOP.
+    """
+    db_path = Path(__file__).parent / "components_db.json"
+    db_data = {}
+    if db_path.exists():
+        try:
+            with open(db_path, "r", encoding="utf-8") as f:
+                db_data = json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load components DB: {e}")
+
+    car_items = []
+    
+    for item in result.get("items", []):
+        if item.get("status") in ["missing", "anomaly", "unexpected"]:
+            # Try to match the item id to the database, fallback to default
+            item_id = item.get("id", "").lower()
+            db_entry = db_data.get(item_id, db_data.get("default", {}))
+            
+            # Append agentic data to the item
+            item["part_number"] = db_entry.get("part_number", "UNKNOWN")
+            item["repair_sop"] = db_entry.get("repair_sop", "Manual review required.")
+            
+            car_items.append({
+                "id": item_id,
+                "part_number": item["part_number"],
+                "repair_sop": item["repair_sop"],
+                "issue": item.get("status")
+            })
+            
+    # Add an overall corrective action plan if needed
+    if car_items:
+        result["corrective_action_plan"] = {
+            "status": "REQUIRED",
+            "actions": car_items
+        }
+    else:
+        result["corrective_action_plan"] = {
+            "status": "NONE",
+            "actions": []
+        }
+        
     return result
 
 
@@ -221,6 +285,9 @@ def run_inspection(image: Image.Image, specification: str) -> dict:
             raw_response = call_vlm(image_b64, prompt)
             result = parse_vlm_response(raw_response)
             result = validate_result(result)
+            
+            # Agentic Decision Making
+            result = agent_post_processing(result)
 
             elapsed = time.time() - start_time
             logger.info(f"Inspection completed in {elapsed:.1f}s")

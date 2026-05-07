@@ -53,9 +53,10 @@ class CameraManager:
                 self.is_connected = False
                 return False
 
-            # Set resolution
+            # Set resolution and minimize buffer latency
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAPTURE_RESOLUTION[0])
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAPTURE_RESOLUTION[1])
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1) # Minimizes lag
 
             self.is_connected = True
             self.prev_frame = None

@@ -1,0 +1,65 @@
+{
+  "resistor": {
+    "part_number": "RES-10K-0805",
+    "description": "10k Ohm SMD Resistor 0805",
+    "category": "Passive",
+    "repair_sop": "Route to SMT Rework Station 4. Apply Type 4 solder paste. Place component manually and reflow using hot air pencil at 260C.",
+    "lead_time_days": 2,
+    "cost_usd": 0.02,
+    "supplier": "DigiKey Electronics"
+  },
+  "electrolytic_capacitor": {
+    "part_number": "CAP-ELEC-100UF-25V",
+    "description": "100uF 25V Electrolytic Capacitor",
+    "category": "Passive",
+    "repair_sop": "Route to TH Rework Station 2. Verify polarity markings on silkscreen before insertion. Hand solder leads at 350C. Clean flux residue.",
+    "lead_time_days": 5,
+    "cost_usd": 0.15,
+    "supplier": "Mouser Electronics"
+  },
+  "ic_chip": {
+    "part_number": "IC-MCU-ATMEGA328P",
+    "description": "ATmega328P Microcontroller 8-bit",
+    "category": "Active",
+    "repair_sop": "Route to BGA/QFP Rework Station 1. Align pins to pads precisely. Use hot air rework system with specific thermal profile for ATmega series. Perform optical alignment check post-reflow.",
+    "lead_time_days": 14,
+    "cost_usd": 2.50,
+    "supplier": "Microchip Technology"
+  },
+  "led": {
+    "part_number": "LED-RED-0603",
+    "description": "Red SMD LED 0603",
+    "category": "Optoelectronics",
+    "repair_sop": "Route to SMT Rework Station 4. WARNING: Polarity sensitive. Green dot indicates cathode. Reflow at 240C max to avoid thermal damage to lens.",
+    "lead_time_days": 3,
+    "cost_usd": 0.05,
+    "supplier": "Würth Elektronik"
+  },
+  "oscillator": {
+    "part_number": "OSC-XTAL-16MHZ",
+    "description": "16MHz Crystal Oscillator SMD",
+    "category": "Timing",
+    "repair_sop": "Route to SMT Rework Station 3. Hand solder using fine tip. Do not use ultrasonic cleaning post-rework as it may damage the crystal.",
+    "lead_time_days": 7,
+    "cost_usd": 0.45,
+    "supplier": "Epson"
+  },
+  "connector": {
+    "part_number": "CONN-HEADER-1X6",
+    "description": "1x6 Pin Header 2.54mm pitch",
+    "category": "Electromechanical",
+    "repair_sop": "Route to TH Rework Station 2. Ensure header is flush with PCB before soldering. Hand solder at 350C.",
+    "lead_time_days": 1,
+    "cost_usd": 0.10,
+    "supplier": "Molex"
+  },
+  "default": {
+    "part_number": "UNKNOWN-PART",
+    "description": "Unrecognized Component",
+    "category": "Unknown",
+    "repair_sop": "Route to Engineering Review Station. Component ID not found in MES database. Manual evaluation required.",
+    "lead_time_days": 0,
+    "cost_usd": 0.00,
+    "supplier": "Unknown"
+  }
+}

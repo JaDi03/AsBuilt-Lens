@@ -9,6 +9,7 @@ ABSOLUTE RULES:
 6. For each item, estimate a confidence score (0-100) representing how certain you are about your assessment.
 7. Return ONLY a valid JSON object. No markdown. No explanations outside the JSON. No code fences.
 8. CRITICAL: You MUST provide 'boxes_2d' coordinates for EVERY item you detect.
+9. LOGIC RULE: 'inspection_passed' must be TRUE if and only if EVERY item in the specification has status: 'present' and the 'detected_count' equals 'expected_count'. If any item is 'missing', 'anomaly', or has a count mismatch, it MUST be FALSE.
 
 THINKING PROCESS (internal, do not output):
 - First, carefully examine the entire image to identify all visible objects and components.

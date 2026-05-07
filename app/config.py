@@ -24,8 +24,8 @@ STABILITY_THRESHOLD = float(os.getenv("STABILITY_THRESHOLD", "0.02"))
 STABILITY_FRAMES = int(os.getenv("STABILITY_FRAMES", "30"))
 
 # ─── Image Processing ─────────────────────────────────────────────────
-MAX_IMAGE_SIZE = int(os.getenv("MAX_IMAGE_SIZE", "720"))
-CAPTURE_RESOLUTION = (1280, 720)
+MAX_IMAGE_SIZE = int(os.getenv("MAX_IMAGE_SIZE", "640"))
+CAPTURE_RESOLUTION = (640, 480)
 SUPPORTED_FORMATS = ["jpg", "jpeg", "png", "bmp", "webp"]
 
 # ─── VLM Configuration ────────────────────────────────────────────────
@@ -42,8 +42,7 @@ INSPECTION_TEMPLATES = {
 - 4x resistor (small rectangular components, through-hole)
 - 1x electrolytic capacitor (cylindrical, vertical mount)
 - 1x IC chip (black, rectangular, with visible pins)
-- 1x LED (small dome-shaped component)
-- 1x crystal oscillator (metallic, cylindrical or rectangular)""",
+- 1x LED (small dome-shaped component)""",
 
     "Packaging Verification": """Expected items:
 - 1x product unit (main item in packaging)
@@ -62,11 +61,22 @@ INSPECTION_TEMPLATES = {
 - 1x utility knife""",
 
     "Electrical Panel": """Expected items:
-- 1x main breaker switch (large, top position)
-- 6x circuit breaker switches (smaller, arranged in rows)
-- 1x ground bus bar (metallic strip with screws)
-- Label tags on each breaker (readable text)
-- No exposed or loose wiring visible"""
+- 1x Main circuit breaker (Large unit at the top, GACIA MM1)
+- 5x Double-pole circuit breakers (Wider blue/white units, CHINT brand)
+- 3x Single-pole circuit breakers (Narrower blue/white units, CHINT brand)
+- 1x Warning sign (Yellow triangle with lightning bolt icon)
+- 1x Voltage label (Yellow rectangle with '220 VOLTIOS' text)
+- 2x Terminal blocks (Grey units next to the small breakers)
+- 2x Ground/Neutral bars (Vertical metallic strips on left and right sides)""",
+
+    "BGS Tool Kit": """Expected items:
+- 4x Screwdrivers (Top right, black and red handles)
+- 6x Open-end wrenches (Bottom right, arranged by size)
+- 1x Hammer (Center position, red head)
+- 2x Pliers (Bottom left, red and yellow handles)
+- 1x T-handle wrench (Top left, large red tool)
+- 9x Sockets (Far left column, red finish)
+- 1x Retractable Cutter/Utility Knife (Center right, thick black and red body, positioned vertically)"""
 }
 
 # ─── UI Configuration ─────────────────────────────────────────────────
