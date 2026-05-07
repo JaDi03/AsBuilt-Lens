@@ -50,24 +50,36 @@ st.markdown("""
         max-width: 95% !important;
     }
 
-    /* Main header styling - Flush to top */
+    /* Main header styling - Branding Left, Tech Right */
     .main-header {
         background: #22262E;
         border-bottom: 2px solid #E8640A;
-        padding: 1rem 2.5rem;
-        margin: 0 -5rem 1.5rem -5rem;
-        text-align: center;
+        padding: 0.7rem 3.5rem;
+        margin: 0 -5rem 1.2rem -5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .header-branding {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
     }
     .main-header p {
         color: #8B919A;
-        font-size: 0.95rem;
+        font-size: 0.75rem;
         font-weight: 300;
-        margin-bottom: 0.75rem;
-        margin-top: 0.5rem;
+        margin: 0 !important;
+        letter-spacing: 0.5px;
     }
     .logo-img {
-        max-width: 280px;
-        margin-bottom: 0rem;
+        width: 180px !important;
+        height: auto;
+        margin-bottom: 0.2rem;
+    }
+    .header-tech {
+        display: flex;
+        gap: 0.4rem;
     }
 
     /* Tech badges */
@@ -460,9 +472,11 @@ except Exception:
 
 st.markdown(f"""
 <div class="main-header">
-    {logo_html}
-    <p>{config.APP_TAGLINE}</p>
-    <div>
+    <div class="header-branding">
+        {logo_html}
+        <p>{config.APP_TAGLINE}</p>
+    </div>
+    <div class="header-tech">
         <span class="tech-badge">AMD Instinct MI300X</span>
         <span class="tech-badge">Qwen3-VL</span>
         <span class="tech-badge">ROCm + vLLM</span>
