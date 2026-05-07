@@ -1173,11 +1173,29 @@ else:
 
         with col_input_img:
             st.markdown("##### Image")
+            
+            # Dynamic text for single mode
+            has_img = st.session_state.get("manual_upload") or st.session_state.get("demo_image")
+            single_btn_text = "CHANGE IMAGE" if has_img else "UPLOAD IMAGE"
+            st.markdown(f"""
+                <style>
+                /* Target only the single mode uploader button */
+                [data-testid="stFileUploader"]:not([key*="batch"]) button {{
+                    font-size: 0 !important;
+                }}
+                [data-testid="stFileUploader"]:not([key*="batch"]) button::after {{
+                    content: "{single_btn_text}";
+                    font-size: 0.9rem !important;
+                    display: block;
+                }}
+                </style>
+            """, unsafe_allow_html=True)
+
             uploaded_file = st.file_uploader(
                 "Upload an image of the object to inspect",
                 type=config.SUPPORTED_FORMATS,
-                key="upload_image",
-                help="Supported formats: JPG, JPEG, PNG, BMP, WEBP"
+                key="manual_upload",
+                label_visibility="collapsed"
             )
 
             if uploaded_file:
@@ -1455,16 +1473,53 @@ else:
     with tab_batch:
         st.markdown("#### Upload multiple images to analyze them in parallel")
         
+        uploaded_batch = st.session_state.get("upload_batch", None)
+        
         col_batch_img, col_batch_spec = st.columns([1, 1])
         
         with col_batch_img:
-            st.markdown("##### Images")
+            # Dynamic CSS Hack to change "Browse files" text
+            button_text = "➕ ADD MORE IMAGES" if uploaded_batch else "ADD IMAGES"
+            st.markdown(f"""
+                <style>
+                /* 1. Cambiar el texto del botón principal */
+                [data-testid="stFileUploader"] button {{
+                    font-size: 0 !important;
+                    padding: 0.5rem 1rem !important;
+                }}
+                [data-testid="stFileUploader"] button::after {{
+                    content: "{button_text}";
+                    font-size: 0.9rem !important;
+                    display: block;
+                }}
+                
+                /* 2. REVERTIR el cambio para los botones de la lista (las X) */
+                [data-testid="stFileUploader"] ul button {{
+                    font-size: 14px !important; /* Tamaño normal de la X */
+                }}
+                [data-testid="stFileUploader"] ul button::after {{
+                    content: "" !important;
+                    display: none !important;
+                }}
+                </style>
+            """, unsafe_allow_html=True)
+
+            # 1. Preview Gallery First
+            if uploaded_batch:
+                st.markdown('<div style="margin-bottom: 10px; color: #E8640A; font-weight: bold; font-size: 0.8rem;">[QUEUE] CURRENT IMAGES:</div>', unsafe_allow_html=True)
+                cols_preview = st.columns(4)
+                for idx, file in enumerate(uploaded_batch[:8]): 
+                    with cols_preview[idx % 4]:
+                        st.image(file, use_container_width=True)
+                st.markdown("<br>", unsafe_allow_html=True)
+
+            # 2. "Add More" Uploader Below
             uploaded_batch = st.file_uploader(
-                "Upload up to 8 images for parallel inspection",
+                "Upload zone",
                 type=config.SUPPORTED_FORMATS,
-                key="upload_batch",
                 accept_multiple_files=True,
-                help="Supported formats: JPG, JPEG, PNG, BMP, WEBP"
+                key="upload_batch",
+                label_visibility="collapsed"
             )
             
             if uploaded_batch:
