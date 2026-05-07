@@ -96,6 +96,11 @@ st.markdown("""
         letter-spacing: 0.03em;
     }
 
+    /* Disable header anchor links */
+    .stMarkdown h1 a, .stMarkdown h2 a, .stMarkdown h3 a, .stMarkdown h4 a, .stMarkdown h5 a, .stMarkdown h6 a {
+        display: none !important;
+    }
+
     /* Standardized Image Container */
     [data-testid="stImage"] img {
         max-height: 450px !important;
@@ -1204,32 +1209,40 @@ else:
                 st.image(image, caption="Uploaded image", use_container_width=True)
             
             # Demo Gallery
-            st.markdown("##### [DEMO] Quick Demos")
+            st.markdown("##### QUICK DEMOS")
             col_d1, col_d2, col_d3 = st.columns(3)
             
             with col_d1:
-                if st.button("[PCB]", help="Load PCB Assembly demo", use_container_width=True):
+                if st.button("[PCB]", use_container_width=True):
                     st.session_state.demo_image = Image.open("assets/demos/pcb_assembly.jpg")
                     st.session_state.template_select = "PCB Assembly"
                     st.session_state.spec_input = config.INSPECTION_TEMPLATES["PCB Assembly"]
                     st.rerun()
             
             with col_d2:
-                if st.button("[PANEL]", help="Load Electrical Panel demo", use_container_width=True):
+                if st.button("[PANEL]", use_container_width=True):
                     st.session_state.demo_image = Image.open("assets/demos/electrical_panel.jpg")
                     st.session_state.template_select = "Electrical Panel"
                     st.session_state.spec_input = config.INSPECTION_TEMPLATES["Electrical Panel"]
                     st.rerun()
             
             with col_d3:
-                if st.button("[TOOLS]", help="Load BGS Tool Kit demo", use_container_width=True):
+                if st.button("[TOOLS]", use_container_width=True):
                     st.session_state.demo_image = Image.open("assets/demos/bgs_tool_kit.PNG")
                     st.session_state.template_select = "BGS Tool Kit"
                     st.session_state.spec_input = config.INSPECTION_TEMPLATES["BGS Tool Kit"]
                     st.rerun()
 
             if st.session_state.get("demo_image"):
-                st.image(st.session_state.demo_image, caption=f"Demo Loaded: {st.session_state.get('template_select')}", use_container_width=True)
+                col_demo_head, col_demo_clear = st.columns([3, 1])
+                with col_demo_head:
+                    st.caption(f"Demo Loaded: {st.session_state.get('template_select')}")
+                with col_demo_clear:
+                    if st.button("✖️ CLEAR", key="clear_demo", use_container_width=True):
+                        st.session_state.demo_image = None
+                        st.rerun()
+                
+                st.image(st.session_state.demo_image, use_container_width=True)
                 image = st.session_state.demo_image
 
         with col_input_spec:
@@ -1292,7 +1305,11 @@ else:
                 disabled=(uploaded_file is None and st.session_state.get("demo_image") is None)
             )
         with col_info:
-            st.caption(f"🔗 Connected to {config.VLM_MODEL} on AMD Cloud (MI300X)")
+            st.markdown(f"""
+                <div style="margin-top: 5px; color: #8B919A; font-size: 0.75rem; text-align: right; opacity: 0.6;">
+                    ENGINE: {config.VLM_MODEL.split('/')[-1]}
+                </div>
+            """, unsafe_allow_html=True)
 
             if run_clicked:
                 active_image = None
