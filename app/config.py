@@ -29,7 +29,7 @@ CAPTURE_RESOLUTION = (640, 480)
 SUPPORTED_FORMATS = ["jpg", "jpeg", "png", "bmp", "webp"]
 
 # ─── VLM Configuration ────────────────────────────────────────────────
-VLM_MAX_TOKENS = 2048
+VLM_MAX_TOKENS = 4096
 VLM_TEMPERATURE = 0.1
 VLM_TIMEOUT = 60  # seconds
 VLM_MAX_RETRIES = 3

@@ -315,7 +315,6 @@ def generate_inspection_report(
                     </div>
                     <div style="text-align: right;">
                         {get_logo_html()}
-                        <div class="report-type">Official Record</div>
                     </div>
                 </div>
             </div>
@@ -608,7 +607,6 @@ def generate_batch_report(batch_data: Dict) -> str:
                     </div>
                     <div style="text-align: right;">
                         {get_logo_html()}
-                        <div class="report-type">Batch Report</div>
                     </div>
                 </div>
             </div>
