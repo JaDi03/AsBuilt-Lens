@@ -730,21 +730,30 @@ def render_inspection_results(result, image, annotated, specification, elapsed):
     if result.get("notes"):
         st.caption(f"[NOTE] Notes: {result['notes']}")
 
-    # ── Agent Corrective Actions (CAR) ──
-    car_plan = result.get("corrective_action_plan", {})
-    if car_plan.get("status") == "REQUIRED":
-        st.markdown("##### [WARN] Corrective Action Request (CAR)")
-        st.warning("The autonomous agent has identified required actions based on the MES database:")
-        for action in car_plan.get("actions", []):
-            st.markdown(f"""
-            <div style="background: rgba(237, 28, 36, 0.1); border-left: 3px solid #ED1C24; padding: 1rem; margin-bottom: 0.5rem; border-radius: 0 4px 4px 0;">
-                <div style="display:flex; justify-content:space-between; margin-bottom: 0.5rem;">
-                    <strong>Part: <span style="color:#FFFFFF;">{action.get('part_number')}</span></strong>
-                    <span style="color:#ED1C24; font-size:0.8rem; font-weight:bold;">{action.get('issue', '').upper()}</span>
-                </div>
-                <div style="font-size:0.85rem; color:#8B919A;"><strong>Repair SOP:</strong> {action.get('repair_sop')}</div>
+    # ── Agent 2: Quality Engineer Diagnostics ──
+    qe_plan = result.get("quality_engineer_diagnostics")
+    if qe_plan:
+        st.markdown("##### 🕵️‍♂️ [AGENT 2] Quality Engineer Diagnostics")
+        severity_colors = {"CRITICAL": "#ED1C24", "MAJOR": "#F59E0B", "MINOR": "#FBBF24"}
+        sev_color = severity_colors.get(qe_plan.get("severity", "MAJOR").upper(), "#F59E0B")
+        
+        st.markdown(f"""
+        <div style="background: #1A1D23; border-left: 4px solid {sev_color}; padding: 1.2rem; border-radius: 4px; margin-bottom: 1rem;">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 0.8rem; border-bottom: 1px solid #2E3340; padding-bottom: 0.5rem;">
+                <strong style="color: #FFFFFF; font-size: 1.1rem;">Root Cause Analysis</strong>
+                <span style="background: {sev_color}20; color: {sev_color}; padding: 0.2rem 0.6rem; border-radius: 4px; font-weight: bold; font-size: 0.8rem;">{qe_plan.get("severity", "MAJOR").upper()} SEVERITY</span>
             </div>
-            """, unsafe_allow_html=True)
+            <p style="color: #D1D5DB; font-size: 0.95rem; margin-bottom: 1rem;">{qe_plan.get("root_cause_analysis", "")}</p>
+            <strong style="color: #E8640A; font-size: 0.9rem;">Corrective Actions:</strong>
+            <ul style="color: #8B919A; font-size: 0.9rem; margin-top: 0.2rem; margin-bottom: 1rem;">
+                {"".join([f"<li>{a}</li>" for a in qe_plan.get("corrective_actions", [])])}
+            </ul>
+            <strong style="color: #10B981; font-size: 0.9rem;">Preventive Measures:</strong>
+            <ul style="color: #8B919A; font-size: 0.9rem; margin-top: 0.2rem; margin-bottom: 0;">
+                {"".join([f"<li>{p}</li>" for p in qe_plan.get("preventive_measures", [])])}
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
 
     # ── Report Generation & Options ──
     st.markdown("---")
@@ -810,7 +819,7 @@ def execute_batch_inspection(images: list, specification: str):
                 <div class="scanline"></div>
                 <img src="data:image/jpeg;base64,{img_str}" style="max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; opacity: 0.7;">
             </div>
-            <p style="text-align: center; color: #E8640A; font-size: 0.8rem; letter-spacing: 2px;">VLM PARALLEL BATCH SCANNING...</p>
+            <p style="text-align: center; color: #E8640A; font-size: 0.8rem; letter-spacing: 2px;">[AGENT 1: INSPECTOR] PARALLEL BATCH SCANNING...</p>
         """, unsafe_allow_html=True)
         
     with col_scan_right:
@@ -1015,7 +1024,7 @@ def execute_inspection(image: Image.Image, specification: str):
                     <div class="scanline"></div>
                     <img src="data:image/jpeg;base64,{img_str}" style="max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; opacity: 0.7;">
                 </div>
-                <p style="text-align: center; color: #E8640A; font-size: 0.8rem; letter-spacing: 2px;">VLM SCANNING IN PROGRESS...</p>
+                <p style="text-align: center; color: #E8640A; font-size: 0.8rem; letter-spacing: 2px;">[AGENT 1: INSPECTOR] SCANNING IN PROGRESS...</p>
             """, unsafe_allow_html=True)
             
         with col_scan_right:
@@ -1092,6 +1101,17 @@ def execute_inspection(image: Image.Image, specification: str):
 
     # Generate annotations once
     passed = result.get("inspection_passed", False)
+    
+    # ── AGENT 2 HANDOFF: Quality Engineer ──
+    if not passed:
+        with st.spinner("⚠️ Anomaly detected. Handing off to [AGENT 2: QUALITY ENGINEER] for root cause analysis..."):
+            from quality_engineer import run_quality_engineer_agent
+            qe_response = run_quality_engineer_agent(image, result)
+            if not qe_response.get("error"):
+                result["quality_engineer_diagnostics"] = qe_response["result"]
+                elapsed += qe_response["elapsed"]
+            else:
+                st.error(f"Quality Engineer Agent failed: {qe_response['error']}")
     annotated = annotate_image(image, result.get("items", []))
     annotated = draw_inspection_badge(annotated, passed)
 

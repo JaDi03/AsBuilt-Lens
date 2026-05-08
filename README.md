@@ -29,11 +29,11 @@
 
 Industrial quality inspection is broken for small and mid-size manufacturers.
 
-**Traditional automated systems** (Automated Optical Inspection — AOI) require:
-- Labeled datasets curated by ML specialists — **thousands of images per defect type**
-- Model retraining for every new product — **weeks of engineering per SKU**
+**Traditional automated systems** (Automated Optical Inspection - AOI) require:
+- Labeled datasets curated by ML specialists - **thousands of images per defect type**
+- Model retraining for every new product - **weeks of engineering per SKU**
 - Physical camera and sensor calibration per assembly line
-- Dedicated hardware costing **$50,000–$200,000 per station**
+- Dedicated hardware costing **$50,000-$200,000 per station**
 
 The result: **80% of manufacturing plants still rely on manual human inspection**, where fatigue reduces accuracy by up to 34% after just 4 hours of continuous work. SMEs and workshops simply cannot afford automated alternatives.
 
@@ -41,20 +41,20 @@ The result: **80% of manufacturing plants still rely on manual human inspection*
 
 ---
 
-## ✨ The Solution: Zero-Shot Visual Inspection
+## ✨ The Solution: Multi-Agent Zero-Shot Inspection
 
-**AsBuilt Lens** eliminates the entire training-and-calibration cycle. Instead of programming rules or labeling datasets, operators simply **describe the inspection in plain English** — the same way they would instruct a human inspector.
+**AsBuilt Lens** eliminates the entire training-and-calibration cycle. Instead of programming rules or labeling datasets, operators simply **describe the inspection in plain English** - the same way they would instruct a human inspector.
 
 ```
 "Expected items: 4x resistor, 1x electrolytic capacitor, 1x IC chip, 1x LED"
 ```
 
-The system handles the rest:
+The system handles the rest through an autonomous **Dual-Agent Workflow** running on the AMD MI300X:
 
 1. **Describe** → Write or select a natural-language inspection specification
 2. **Capture** → Upload an image or use a live camera with automatic stability detection
-3. **Analyze** → The image and specification are processed by Qwen3-VL on AMD MI300X
-4. **Decide** → Structured PASS/FAIL verdict with per-item status, confidence scores, and an annotated image
+3. **[AGENT 1] Inspector** → Analyzes the image against the spec to generate a structured PASS/FAIL verdict, per-item status, and bounding boxes.
+4. **[AGENT 2] Quality Engineer** → *Autonomous Handoff:* If Agent 1 detects a failure, Agent 2 is triggered automatically. It performs a secondary deep multimodal analysis to determine the root cause, severity, and recommends a detailed Corrective Action Plan.
 
 **Zero training. Zero datasets. Zero reconfiguration when switching products.**
 
@@ -70,10 +70,10 @@ The system handles the rest:
 | **Auto-Discovery** | Let the AI identify all visible components before you write your specification. |
 | **Structured JSON Results** | Item-by-item status, detected counts, confidence scores, and human-readable summary. |
 | **Annotated Output Image** | Color-coded bounding boxes and PASS/FAIL badge overlaid directly on the inspected image. |
-| **Downloadable Inspection Report** | Auto-generated professional HTML report with full results — ready for QA records or audit trails. |
+| **Downloadable Inspection Report** | Auto-generated professional HTML report with full results - ready for QA records or audit trails. |
 | **Inspection History** | Every run is logged in the sidebar with timestamp, pass rate, and specification. |
 | **Built-in Templates** | Ready-to-use templates for PCB Assembly, Tool Kits, Electrical Panels, and Packaging. |
-| **Demo Mode** | One-click demo with a pre-loaded PCB sample image — no hardware needed. |
+| **Demo Mode** | One-click demo with a pre-loaded PCB sample image - no hardware needed. |
 
 ---
 
@@ -85,7 +85,7 @@ The system handles the rest:
 |--------|-------|
 | **TAM** | Global AOI market ≈ **$2.4 billion**, growing 15% CAGR |
 | **Target Segment** | SMEs, repair shops, quality labs underserved by traditional AOI |
-| **Pricing Model** | SaaS — $0.05/inspection or monthly license ($99–$499/month) |
+| **Pricing Model** | SaaS - $0.05/inspection or monthly license ($99-$499/month) |
 
 ### Why We Win
 
@@ -100,7 +100,7 @@ The system handles the rest:
 
 ### Competitive Edge
 
-Traditional systems give you a binary verdict: "Good" or "Bad." AsBuilt Lens **reasons** about what it sees — it can tell you *what* is missing, *how many* were expected versus detected, and provide factual observations about anomalies. This enables root-cause analysis directly from the inspection step.
+Traditional systems give you a binary verdict: "Good" or "Bad." AsBuilt Lens **reasons** about what it sees - it can tell you *what* is missing, *how many* were expected versus detected, and provide factual observations about anomalies. This enables root-cause analysis directly from the inspection step.
 
 ---
 
@@ -111,7 +111,8 @@ AsBuilt-Lens/
 ├── app/
 │   ├── app.py              # Main Streamlit UI & application loop
 │   ├── config.py           # Environment variable loading & constants
-│   ├── inspector.py        # VLM API calls, JSON parsing, retry logic
+│   ├── inspector.py        # [AGENT 1] Visual inspection logic & VLM calls
+│   ├── quality_engineer.py # [AGENT 2] Autonomous root-cause analysis logic
 │   ├── camera.py           # Webcam/IP camera management & stability detection
 │   ├── utils.py            # Image annotation, formatting utilities
 │   ├── report.py           # Automated inspection report generator
@@ -133,29 +134,18 @@ AsBuilt-Lens/
 
 ### Data Flow
 
-```
-User writes specification
-        │
-        ▼
-  Image captured (upload or live camera)
-        │
-        ▼
-  Image resized & encoded as base64 JPEG (max 720p)
-        │
-        ▼
-  Prompt built: specification injected into structured template
-        │
-        ▼
-  POST → AMD MI300X (vLLM → Qwen3-VL-32B-Instruct)
-        │
-        ▼
-  JSON parsed: items[], inspection_passed, summary
-        │
-        ▼
-  Results rendered: annotated image + item cards + PASS/FAIL badge
-        │
-        ▼
-  Inspection report auto-generated (downloadable HTML)
+```mermaid
+graph TD
+    A[User Specification] --> B(Image Capture)
+    C[Camera / Upload] --> B
+    B --> D[AGENT 1: Inspector]
+    D -->|POST to MI300X vLLM| E{Inspection Passed?}
+    E -->|Yes| F[Generate Success Report]
+    E -->|No| G[AGENT 2: Quality Engineer]
+    G -->|Deep Visual Analysis| H[Generate Diagnostics and Action Plan]
+    H --> I[Generate Failure Report]
+    F --> J[Display UI and Export PDF]
+    I --> J
 ```
 
 ---
