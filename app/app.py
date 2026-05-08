@@ -689,10 +689,12 @@ def render_inspection_results(result, image, annotated, specification, elapsed):
     col_orig, col_anno = st.columns(2)
     with col_orig:
         st.markdown("##### [IMG] ORIGINAL")
-        st.image(image, width="stretch")
+        with st.container(height=400, border=True):
+            st.image(image, width="stretch")
     with col_anno:
         st.markdown("##### [IMG] ANNOTATED")
-        st.image(annotated, width="stretch")
+        with st.container(height=400, border=True):
+            st.image(annotated, width="stretch")
 
     st.markdown("---")
     st.markdown("##### [DATA] Item Details")
@@ -804,9 +806,9 @@ def execute_batch_inspection(images: list, specification: str):
     
     with col_scan_left:
         st.markdown(f"""
-            <div class="scanline-container" style="max-width: 100%;">
+            <div class="scanline-container" style="max-width: 100%; height: 400px; display: flex; align-items: center; justify-content: center; background-color: #0E1117; border-radius: 8px; border: 1px solid #2E3340; overflow: hidden; position: relative;">
                 <div class="scanline"></div>
-                <img src="data:image/jpeg;base64,{img_str}" style="width: 100%; border-radius: 8px; opacity: 0.7;">
+                <img src="data:image/jpeg;base64,{img_str}" style="max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; opacity: 0.7;">
             </div>
             <p style="text-align: center; color: #E8640A; font-size: 0.8rem; letter-spacing: 2px;">VLM PARALLEL BATCH SCANNING...</p>
         """, unsafe_allow_html=True)
@@ -951,9 +953,11 @@ def render_batch_results(batch_data):
                 # Side-by-side comparison for batch items
                 c1, c2 = st.columns(2)
                 with c1:
-                    st.image(r["original_image"], width="stretch")
+                    with st.container(height=300, border=True):
+                        st.image(r["original_image"], width="stretch")
                 with c2:
-                    st.image(r["annotated_image"], width="stretch")
+                    with st.container(height=300, border=True):
+                        st.image(r["annotated_image"], width="stretch")
                 
                 with st.expander("[DATA] Details"):
                     st.caption(f"Time: {r['elapsed']:.2f}s")
@@ -1007,9 +1011,9 @@ def execute_inspection(image: Image.Image, specification: str):
         
         with col_scan_left:
             st.markdown(f"""
-                <div class="scanline-container" style="max-width: 100%;">
+                <div class="scanline-container" style="max-width: 100%; height: 400px; display: flex; align-items: center; justify-content: center; background-color: #0E1117; border-radius: 8px; border: 1px solid #2E3340; overflow: hidden; position: relative;">
                     <div class="scanline"></div>
-                    <img src="data:image/jpeg;base64,{img_str}" style="width: 100%; border-radius: 8px; opacity: 0.7;">
+                    <img src="data:image/jpeg;base64,{img_str}" style="max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; opacity: 0.7;">
                 </div>
                 <p style="text-align: center; color: #E8640A; font-size: 0.8rem; letter-spacing: 2px;">VLM SCANNING IN PROGRESS...</p>
             """, unsafe_allow_html=True)
