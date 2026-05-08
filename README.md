@@ -134,19 +134,7 @@ AsBuilt-Lens/
 
 ### Data Flow
 
-```mermaid
-graph TD
-    A[User Specification] --> B(Image Capture)
-    C[Camera / Upload] --> B
-    B --> D[AGENT 1: Inspector]
-    D -->|POST to MI300X vLLM| E{Inspection Passed?}
-    E -->|Yes| F[Generate Success Report]
-    E -->|No| G[AGENT 2: Quality Engineer]
-    G -->|Deep Visual Analysis| H[Generate Diagnostics and Action Plan]
-    H --> I[Generate Failure Report]
-    F --> J[Display UI and Export PDF]
-    I --> J
-```
+![Data Flow](assets/data_flow.png)
 
 ---
 

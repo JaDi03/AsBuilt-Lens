@@ -61,7 +61,7 @@ def run_quality_engineer_agent(image: Image.Image, inspector_result: dict) -> di
     last_error = None
     for attempt in range(VLM_MAX_RETRIES):
         try:
-            logger.info(f"[QUALITY ENGINEER] Analyzing root cause (Attempt {attempt + 1})")
+            logger.info(f"\033[1;36m[AGENT 2: QUALITY ENGINEER]\033[0m 🧠 Analyzing root cause (Attempt {attempt + 1}) \033[90m(Chain-of-Thought activated)\033[0m")
             raw_response = call_vlm(image_b64, prompt)
             qe_result = parse_vlm_response(raw_response)
             
@@ -72,7 +72,7 @@ def run_quality_engineer_agent(image: Image.Image, inspector_result: dict) -> di
             qe_result.setdefault("preventive_measures", ["Review process controls"])
             
             elapsed = time.time() - start_time
-            logger.info(f"[QUALITY ENGINEER] Analysis complete in {elapsed:.1f}s")
+            logger.info(f"\033[1;32m[AGENT 2: QUALITY ENGINEER]\033[0m 🛠️ Analysis complete in {elapsed:.1f}s \033[90m(Corrective Actions Generated)\033[0m")
             
             return {
                 "result": qe_result,

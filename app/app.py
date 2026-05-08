@@ -6,7 +6,16 @@ Zero-shot visual inspection powered by AMD MI300X + Qwen3-VL.
 import streamlit as st
 import time
 import numpy as np
+import logging
 from PIL import Image
+
+# ─── Logging Configuration ─────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(message)s' # Clean format for terminal "show"
+)
+logger = logging.getLogger(__name__)
+logger.info("\033[1;32m[SYSTEM] AsBuilt Lens Initialized on AMD MI300X Pipeline\033[0m")
 
 import config
 from inspector import run_inspection, run_mock_inspection, run_discovery

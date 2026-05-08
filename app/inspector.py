@@ -283,7 +283,7 @@ def run_inspection(image: Image.Image, specification: str) -> dict:
     last_error = None
     for attempt in range(VLM_MAX_RETRIES):
         try:
-            logger.info(f"[AGENT: INSPECTOR] VLM call attempt {attempt + 1}/{VLM_MAX_RETRIES}")
+            logger.info(f"\033[1;33m[AGENT 1: INSPECTOR]\033[0m 🔍 VLM call attempt {attempt + 1}/{VLM_MAX_RETRIES} \033[90m(MI300X Accelerated)\033[0m")
             raw_response = call_vlm(image_b64, prompt)
             result = parse_vlm_response(raw_response)
             result = validate_result(result)
@@ -292,7 +292,7 @@ def run_inspection(image: Image.Image, specification: str) -> dict:
             result = agent_post_processing(result)
 
             elapsed = time.time() - start_time
-            logger.info(f"[AGENT: INSPECTOR] Inspection completed in {elapsed:.1f}s")
+            logger.info(f"\033[1;32m[AGENT 1: INSPECTOR]\033[0m ✅ Inspection completed in {elapsed:.1f}s \033[90m(Batch: 1, Precision: FP16)\033[0m")
 
             return {
                 "result": result,
