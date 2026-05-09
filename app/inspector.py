@@ -284,11 +284,17 @@ def run_inspection(image: Image.Image, specification: str) -> dict:
     for attempt in range(VLM_MAX_RETRIES):
         try:
             logger.info(f"\033[1;33m[AGENT 1: INSPECTOR]\033[0m 🔍 VLM call attempt {attempt + 1}/{VLM_MAX_RETRIES} \033[90m(MI300X Accelerated)\033[0m")
+            logger.info(f"\033[1;33m[AGENT 1: INSPECTOR]\033[0m 📡 Dispatching encoded payload to AMD MI300X VLM endpoint...")
             raw_response = call_vlm(image_b64, prompt)
+            
+            logger.info(f"\033[1;33m[AGENT 1: INSPECTOR]\033[0m 📥 Parsing JSON payload for bounding boxes and confidence scores...")
             result = parse_vlm_response(raw_response)
+            
+            logger.info(f"\033[1;33m[AGENT 1: INSPECTOR]\033[0m ⚖️ Executing deterministic validation and logic constraints...")
             result = validate_result(result)
             
             # Agentic Decision Making
+            logger.info(f"\033[1;33m[AGENT 1: INSPECTOR]\033[0m 🔄 Querying local components_db.json for part cross-reference...")
             result = agent_post_processing(result)
 
             elapsed = time.time() - start_time

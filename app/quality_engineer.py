@@ -62,7 +62,10 @@ def run_quality_engineer_agent(image: Image.Image, inspector_result: dict) -> di
     for attempt in range(VLM_MAX_RETRIES):
         try:
             logger.info(f"\033[1;36m[AGENT 2: QUALITY ENGINEER]\033[0m 🧠 Analyzing root cause (Attempt {attempt + 1}) \033[90m(Chain-of-Thought activated)\033[0m")
+            logger.info(f"\033[1;36m[AGENT 2: QUALITY ENGINEER]\033[0m 📡 Prompting VLM for Root Cause Analysis (Chain-of-Thought)...")
             raw_response = call_vlm(image_b64, prompt)
+            
+            logger.info(f"\033[1;36m[AGENT 2: QUALITY ENGINEER]\033[0m 📝 Parsing VLM output into Corrective Action Report (CAR) structure...")
             qe_result = parse_vlm_response(raw_response)
             
             # Ensure fields exist
