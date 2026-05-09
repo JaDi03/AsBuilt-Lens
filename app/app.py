@@ -479,6 +479,24 @@ def update_template():
     st.session_state.spec_input = config.INSPECTION_TEMPLATES.get(template_name, "")
 
 
+def update_batch_template():
+    """Callback to update batch spec and demo images when selectbox changes."""
+    template_name = st.session_state.template_batch
+    # Update specification text area
+    st.session_state.spec_batch = config.INSPECTION_TEMPLATES.get(template_name, "")
+    
+    # Load demo images if available for this template
+    if template_name in getattr(config, "BATCH_DEMO_SAMPLES", {}):
+        paths = config.BATCH_DEMO_SAMPLES[template_name]
+        try:
+            st.session_state.batch_demo_images = [Image.open(p) for p in paths]
+        except Exception as e:
+            logger.error(f"Error loading batch demo images: {e}")
+            st.session_state.batch_demo_images = None
+    else:
+        st.session_state.batch_demo_images = None
+
+
 init_session_state()
 
 
@@ -823,13 +841,30 @@ def execute_batch_inspection(images: list, specification: str):
     col_scan_left, col_scan_right = scan_placeholder.columns([1, 1])
     
     with col_scan_left:
-        st.markdown(f"""
-            <div class="scanline-container" style="max-width: 100%; height: 400px; display: flex; align-items: center; justify-content: center; background-color: #0E1117; border-radius: 8px; border: 1px solid #2E3340; overflow: hidden; position: relative;">
-                <div class="scanline"></div>
-                <img src="data:image/jpeg;base64,{img_str}" style="max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; opacity: 0.7;">
-            </div>
-            <p style="text-align: center; color: #E8640A; font-size: 0.8rem; letter-spacing: 2px;">[AGENT 1: INSPECTOR] PARALLEL BATCH SCANNING...</p>
-        """, unsafe_allow_html=True)
+        st.markdown('<div style="color: #E8640A; font-weight: bold; font-size: 0.75rem; letter-spacing: 1.5px; text-align: center; margin-bottom: 10px;">[AGENT 1] MASSIVE PARALLEL SCANNING (AMD MI300X)</div>', unsafe_allow_html=True)
+        
+        # Create a grid using Streamlit columns for stability
+        display_subset = images[:6]
+        grid_cols = st.columns(2)
+        
+        for idx, img in enumerate(display_subset):
+            # RESIZE for preview
+            preview_img = img.copy()
+            preview_img.thumbnail((250, 250))
+            
+            buf = io.BytesIO()
+            d_img = preview_img.convert("RGB") if preview_img.mode != "RGB" else preview_img
+            d_img.save(buf, format="JPEG", quality=60)
+            b64_str = base64.b64encode(buf.getvalue()).decode()
+            
+            # Render each image in its own column to avoid "text wall" errors
+            with grid_cols[idx % 2]:
+                st.markdown(f"""
+                    <div class="scanline-container" style="width: 100%; aspect-ratio: 1 / 1; background-color: #0E1117; border-radius: 4px; border: 1px solid #2E3340; overflow: hidden; position: relative; margin-bottom: 8px;">
+                        <div class="scanline"></div>
+                        <img src="data:image/jpeg;base64,{b64_str}" style="height: 100%; width: 100%; object-fit: cover; opacity: 0.6;">
+                    </div>
+                """, unsafe_allow_html=True)
         
     with col_scan_right:
         log_placeholder = st.empty()
@@ -1543,6 +1578,20 @@ else:
                     with cols_preview[idx % 4]:
                         st.image(file, width="stretch")
                 st.markdown("<br>", unsafe_allow_html=True)
+            elif st.session_state.get("batch_demo_images"):
+                col_demo_batch_head, col_demo_batch_clear = st.columns([3, 1])
+                with col_demo_batch_head:
+                    st.markdown('<div style="margin-bottom: 10px; color: #E8640A; font-weight: bold; font-size: 0.8rem;">[DEMO] BATCH SAMPLES LOADED:</div>', unsafe_allow_html=True)
+                with col_demo_batch_clear:
+                    if st.button("✖️ CLEAR", key="clear_batch_demo", width="stretch"):
+                        st.session_state.batch_demo_images = None
+                        st.rerun()
+                
+                cols_preview = st.columns(4)
+                for idx, img in enumerate(st.session_state.batch_demo_images[:8]): 
+                    with cols_preview[idx % 4]:
+                        st.image(img, width="stretch")
+                st.markdown("<br>", unsafe_allow_html=True)
 
             # 2. "Add More" Uploader Below
             uploaded_batch = st.file_uploader(
@@ -1565,7 +1614,8 @@ else:
             template_batch = st.selectbox(
                 "Choose a template",
                 options=list(config.INSPECTION_TEMPLATES.keys()),
-                key="template_batch"
+                key="template_batch",
+                on_change=update_batch_template
             )
 
             spec_batch = st.text_area(
@@ -1582,15 +1632,24 @@ else:
                 "START BATCH INSPECTION",
                 width="stretch",
                 type="primary",
-                disabled=(not uploaded_batch)
+                disabled=(not uploaded_batch and not st.session_state.get("batch_demo_images"))
             )
         with col_info_batch:
             st.caption(f"[LINK] Connected to {config.VLM_MODEL} on AMD Cloud (MI300X)")
             
-            if run_batch_clicked and uploaded_batch:
-                st.session_state.pending_batch_images = [Image.open(f) for f in uploaded_batch]
-                st.session_state.pending_batch_spec = spec_batch
-                st.rerun()
+            if run_batch_clicked:
+                active_images = None
+                if uploaded_batch:
+                    active_images = [Image.open(f) for f in uploaded_batch]
+                elif st.session_state.get("batch_demo_images"):
+                    active_images = st.session_state.batch_demo_images
+                
+                if active_images:
+                    st.session_state.pending_batch_images = active_images
+                    st.session_state.pending_batch_spec = spec_batch
+                    st.rerun()
+                else:
+                    st.error("Please upload images or select a batch template with demo samples.")
 
 
 # ─── Footer ───────────────────────────────────────────────────────────

@@ -11,6 +11,7 @@ ABSOLUTE RULES:
 8. CRITICAL: You MUST provide 'boxes_2d' coordinates for EVERY item you detect.
 9. LOGIC RULE: 'inspection_passed' must be TRUE if and only if EVERY item in the specification has status: 'present' and the 'detected_count' equals 'expected_count'. If any item is 'missing', 'anomaly', or has a count mismatch, it MUST be FALSE.
 10. SYSTEMATIC SEARCH: For dense scenes with many components, you MUST execute a thorough visual grid-search before finalizing counts. State your reasoning explicitly.
+11. SPATIAL INTELLIGENCE: The object in the image may be tilted, rotated, or at an angle. You MUST identify and annotate components correctly regardless of their orientation. Ensure bounding box coordinates [ymin, xmin, ymax, xmax] tightly encompass the component in its current perspective.
 
 OUTPUT FORMAT (return ONLY this JSON, nothing else):
 {

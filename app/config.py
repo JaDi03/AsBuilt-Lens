@@ -38,6 +38,23 @@ VLM_RETRY_DELAY = 2  # seconds (base for exponential backoff)
 # ─── Inspection Templates ─────────────────────────────────────────────
 INSPECTION_TEMPLATES = {
     "Custom Specification": "",
+
+    # --- Batch Specialized Templates ---
+    "Batch: PCB Quality Audit": """Batch Inspection Specification:
+- Perform perspective-invariant detection (board may be tilted).
+- Each unit must have 4x blue resistors.
+- 1x central black IC chip must be present.
+- 1x silver cylindrical capacitor must be present.
+- Flag any missing component as FAIL.""",
+
+    "Batch: Tool Kit Inventory": """Batch Inventory Check:
+- Each tool tray must contain:
+  - 1x Hammer (red head)
+  - 2x Screwdrivers
+  - 1x Pliers (yellow handle)
+- If any tool is missing from a tray, mark that image as FAIL.""",
+
+    # --- Standard Templates ---
     "PCB Assembly": """Expected items:
 - 4x resistor (small rectangular components, through-hole)
 - 1x electrolytic capacitor (cylindrical, vertical mount)
@@ -77,6 +94,18 @@ INSPECTION_TEMPLATES = {
 - 1x T-handle wrench (Top left, large red tool)
 - 9x Sockets (Far left column, red finish)
 - 1x Retractable Cutter/Utility Knife (Center right, thick black and red body, positioned vertically)"""
+}
+
+# ─── Demo Samples ─────────────────────────────────────────────────────
+BATCH_DEMO_SAMPLES = {
+    "Batch: PCB Quality Audit": [
+        "assets/batch_pcb_1.png",
+        "assets/batch_pcb_2.png",
+        "assets/batch_pcb_3.png",
+        "assets/batch_pcb_4.png",
+        "assets/batch_pcb_5.png",
+        "assets/batch_pcb_6.png",
+    ]
 }
 
 # ─── UI Configuration ─────────────────────────────────────────────────
