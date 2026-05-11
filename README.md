@@ -286,9 +286,9 @@ Open your browser at `http://localhost:8501`.
 
 | Resource | Link |
 |----------|------|
-| 📹 **Video Demo** | [Coming Soon](#) |
+| 📹 **Video Demo** | https://youtu.be/-wU4ylbjeoE |
 | 🤗 **Hugging Face Space** | [Coming Soon](#) |
-| 📄 **Technical Document** | [docs/technical_document.md](docs/technical_document.md) |
+| 📄 **Technical Document** | [Coming Soon] |
 | 📂 **GitHub Repository** | [github.com/JaDi03/AsBuilt-Lens](https://github.com/JaDi03/AsBuilt-Lens) |
 
 ---
